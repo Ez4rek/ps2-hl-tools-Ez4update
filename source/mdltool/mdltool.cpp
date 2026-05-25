@@ -1,4 +1,5 @@
 // Author:	supadupaplex
+// Modified:	Added --scale flag for scale resize and texture dimension warnings
 // License:	BSD-3-Clause (check out license.txt)
 
 //
@@ -10,42 +11,39 @@
 #include "main.h"
 
 ////////// Global variables //////////
-
+// When true, use ScaleResize instead of TileResize during MDL->DOL conversion.
+// Set by passing "scale" as first argument.
+static bool g_UseScaleResize = false;
 
 ////////// Functions //////////
-uint PSIProperSize(uint Size, bool ToLower);																		// Calculate nearest appropriate size of PS2 DOL texture
-void ExtractDOLTextures(const char * FileName);																		// Extract textures from PS2 model
-void ExtractMDLTextures(const char * FileName);																		// Extract textures from PC model
-void ConvertMDLToDOL(const char * FileName);																		// Convert model from PC to PS2 format
-void ConvertDOLToMDL(const char * FileName);																		// Convert model from PS2 to PC format
-void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension);						// Convert submodel
-void ConvertDummySubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension);					// Convert submodel which consists of signature and name only
-void GetExtraDOLData(const char * FileName);																		// Extract extra data from DOL model
-bool AddTerminator(char * Buffer, char Symbol);																		// Helper for CheckExtraFile()
-ushort CountSymbols(char * Buffer, char Symbol);																	// Counts symbols in line
-bool CheckExtraFile(const char * FileName);																			// Check if extra *.INF file is valid
-void GetValues(char * Buffer, ulong * Values, uchar ValuesCount);													// Helper for TranslateExtraFile()
-bool TranslateExtraFile(const char * FileName, sDOLExtraSection * DOLExtraSect, sDOLLODEntry ** LODTable);			// Fetch data from extra *.INF file
-void PatchSubmodelRef(sModelHeader * MdlHdr, char * ModelData, ulong ModelDataSize, char * NewExtension);			// Patch internal submodel references
-int CheckModel(const char * FileName);																				// Check model type
+uint PSIProperSize(uint Size, bool ToLower);
+void ExtractDOLTextures(const char * FileName);
+void ExtractMDLTextures(const char * FileName);
+void ConvertMDLToDOL(const char * FileName);
+void ConvertDOLToMDL(const char * FileName);
+void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension);
+void ConvertDummySubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension);
+void GetExtraDOLData(const char * FileName);
+bool AddTerminator(char * Buffer, char Symbol);
+ushort CountSymbols(char * Buffer, char Symbol);
+bool CheckExtraFile(const char * FileName);
+void GetValues(char * Buffer, ulong * Values, uchar ValuesCount);
+bool TranslateExtraFile(const char * FileName, sDOLExtraSection * DOLExtraSect, sDOLLODEntry ** LODTable);
+void PatchSubmodelRef(sModelHeader * MdlHdr, char * ModelData, ulong ModelDataSize, char * NewExtension);
+int CheckModel(const char * FileName);
 void PatchDOLExtraSection(char * ModelData, ulong ModelDataSize, ulong LODDataOffseet, uchar MaxBodyParts, uchar NumBodyGroups, ulong FadeStart, ulong FadeEnd);
-		// Write extra data to DOL model file (this is needed to allow correct body part part switching and to stop crashing on PS2).
-void SeqReport(const char * FileName);																				// Sequence report
+void SeqReport(const char * FileName);
 
 
-// Write extra data to DOL model file (this is needed to allow correct body part switching and to stop crashing on PS2)
 void PatchDOLExtraSection(char * ModelData, ulong ModelDataSize, ulong LODDataOffseet, uchar MaxBodyParts, uchar NumBodyGroups, ulong FadeStart, ulong FadeEnd)
 {
 	sDOLExtraSection * DOLExtraSection;
 
-	// Check if model is empty
 	if (ModelDataSize < sizeof(sDOLExtraSection))
 		return;
-	
-	// Set pointer to a begining of extra section
+
 	DOLExtraSection = (sDOLExtraSection *)ModelData;
 
-	// Write data
 	DOLExtraSection->LODDataOffset = LODDataOffseet;
 	DOLExtraSection->MaxBodyParts = MaxBodyParts;
 	DOLExtraSection->NumBodyGroups = NumBodyGroups;
@@ -58,42 +56,34 @@ void PatchDOLExtraSection(char * ModelData, ulong ModelDataSize, ulong LODDataOf
 		DOLExtraSection->FadeEnd = FadeStart;
 }
 
-int CheckModel(const char * FileName)	// Check model type
+int CheckModel(const char * FileName)
 {
 	FILE * ptrModelFile;
-
 	sModelHeader ModelHeader;
-
 	int ModelType;
 
-	// Open model file
 	SafeFileOpen(&ptrModelFile, FileName, "rb");
 
-	// Check for dummy model (Signature, Name and FileSize only)
 	if (FileSize(&ptrModelFile) < sizeof(sModelHeader))
 	{
 		ModelType = DUMMY_MODEL;
 	}
 	else
 	{
-		// Load header
 		ModelHeader.UpdateFromFile(&ptrModelFile);
-
-		// Get model type
 		ModelType = ModelHeader.CheckModel();
 	}
 
 	fclose(ptrModelFile);
-
 	return ModelType;
 }
 
-void ConvertDOLToMDL(const char * FileName)		// Convert model from PS2 to PC format 
+void ConvertDOLToMDL(const char * FileName)
 {
-	sModelHeader ModelHeader;					// Model file header
-	sModelTextureEntry * ModelTextureTable;		// Model texture table
-	ulong ModelTextureTableSize;				// Model texture table size (how many textures)
-	sTexture * Textures;						// Pointer to textures data
+	sModelHeader ModelHeader;
+	sModelTextureEntry * ModelTextureTable;
+	ulong ModelTextureTableSize;
+	sTexture * Textures;
 
 	FILE * ptrInFile;
 	char cNewModelName[64];
@@ -102,13 +92,9 @@ void ConvertDOLToMDL(const char * FileName)		// Convert model from PS2 to PC for
 
 	ulong ModelSize;
 
-	// Open file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Get header from file
 	ModelHeader.UpdateFromFile(&ptrInFile);
 
-	// Check model
 	if (ModelHeader.CheckModel() == NORMAL_MODEL)
 	{
 		printf("Internal name: %s \nTextures: %i, Texture table offset: 0x%X \n", ModelHeader.Name, ModelHeader.TextureCount, ModelHeader.TextureTableOffset);
@@ -119,74 +105,58 @@ void ConvertDOLToMDL(const char * FileName)		// Convert model from PS2 to PC for
 		return;
 	}
 
-	// Save extra *.DOL data to *.INF file
-	if (ModelHeader.TextureTableOffset - sizeof(sModelHeader) > sizeof(sDOLExtraSection))	// Do not extract data from texture submodels
+	if (ModelHeader.TextureTableOffset - sizeof(sModelHeader) > sizeof(sDOLExtraSection))
 		GetExtraDOLData(FileName);
 
-	// Allocate memory for textures
 	ModelTextureTableSize = ModelHeader.TextureCount * sizeof(sModelTextureEntry);
 	ModelTextureTable = (sModelTextureEntry *)malloc(ModelTextureTableSize);
 	Textures = (sTexture *)malloc(sizeof(sTexture) * ModelHeader.TextureCount);
 
-	// Load and convert textures
-	uint BitmapOffset;
-	uint BitmapSize;
-	uint PaletteOffset;
-	uint PaletteSize;
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	uint BitmapOffset, BitmapSize, PaletteOffset, PaletteSize;
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].UpdateFromFile(&ptrInFile, ModelHeader.TextureTableOffset, i);
-		//printf(" Texture #%i \n Name: %s \n Width: %i \n Height: %i \n Offset: 0x%X \n\n", i + 1, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height, ModelTextureTable[i].Offset);
 
 		BitmapOffset = ModelTextureTable[i].Offset + DOL_TEXTURE_HEADER_SIZE + EIGHT_BIT_PALETTE_ELEMENTS_COUNT * DOL_BMP_PALETTE_ELEMENT_SIZE;
 		BitmapSize = ModelTextureTable[i].Height * ModelTextureTable[i].Width;
 		PaletteOffset = ModelTextureTable[i].Offset + DOL_TEXTURE_HEADER_SIZE;
 		PaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * DOL_BMP_PALETTE_ELEMENT_SIZE;
 
-		// Load texture
 		Textures[i].Initialize();
 		Textures[i].UpdateFromFile(&ptrInFile, BitmapOffset, BitmapSize, PaletteOffset, PaletteSize, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height);
-		
-		// Convert texture
+
 		Textures[i].PaletteReformat(DOL_BMP_PALETTE_ELEMENT_SIZE);
 		Textures[i].PaletteRemoveSpacers();
 	}
 
-	// Write results to output file
-	// Open output file
 	FileGetFullName(FileName, cOutFileName, sizeof(cOutFileName));
 	strcat(cOutFileName, ".mdl");
 	SafeFileOpen(&ptrOutFile, cOutFileName, "wb");
 
-	// Write modified header
 	FileGetName(cOutFileName, cNewModelName, sizeof(cNewModelName), false);
 	strcat(cNewModelName, ".mdl");
 	ModelHeader.Rename(cNewModelName);
-	ModelHeader.TextureDataOffset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2; // HotFix
+	ModelHeader.TextureDataOffset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
 	FileWriteBlock(&ptrOutFile, (char *)&ModelHeader, sizeof(sModelHeader));
 
-	// Write patched model data
 	uchar * ModelData;
 	ModelData = (uchar *)malloc(ModelHeader.TextureTableOffset - sizeof(sModelHeader));
 	FileReadBlock(&ptrInFile, (char *)ModelData, sizeof(sModelHeader), ModelHeader.TextureTableOffset - sizeof(sModelHeader));
-	PatchDOLExtraSection((char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), 0x00504453, 0, 0, 0, 0);		// Clear extra field
-	PatchSubmodelRef(&ModelHeader, (char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), ".mdl");			// Patch internal submodel references
+	PatchDOLExtraSection((char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), 0x00504453, 0, 0, 0, 0);
+	PatchSubmodelRef(&ModelHeader, (char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), ".mdl");
 	FileWriteBlock(&ptrOutFile, (char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader));
 	free(ModelData);
 
-	// Write modified texture table
 	uint Offset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].Width = Textures[i].Width;
 		ModelTextureTable[i].Height = Textures[i].Height;
 		ModelTextureTable[i].Offset = Offset;
-
 		Offset += Textures[i].Width * Textures[i].Height + Textures[i].PaletteSize;
 	}
 	FileWriteBlock(&ptrOutFile, (char *)ModelTextureTable, ModelTextureTableSize);
 
-	// Write skin data
 	uchar * SkinTable;
 	ulong SkinTableSize = ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
 	SkinTable = (uchar *)malloc(SkinTableSize);
@@ -194,36 +164,31 @@ void ConvertDOLToMDL(const char * FileName)		// Convert model from PS2 to PC for
 	FileWriteBlock(&ptrOutFile, SkinTable, SkinTableSize);
 	free(SkinTable);
 
-	// Write textures
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
-		FileWriteBlock(&ptrOutFile, (char *)Textures[i].Bitmap, Textures[i].Width * Textures[i].Height);		
+		FileWriteBlock(&ptrOutFile, (char *)Textures[i].Bitmap, Textures[i].Width * Textures[i].Height);
 		FileWriteBlock(&ptrOutFile, (char *)Textures[i].Palette, Textures[i].PaletteSize);
 	}
 
-	// Update model size field
 	ModelSize = FileSize(&ptrOutFile);
-	FileWriteBlock(&ptrOutFile, &ModelSize, 0x48, sizeof(ModelSize));	// 0x48 - address of model size field
+	FileWriteBlock(&ptrOutFile, &ModelSize, 0x48, sizeof(ModelSize));
 
-	// Free memory
 	free(ModelTextureTable);
 	free(Textures);
-	
-	// Close files
 	fclose(ptrInFile);
 	fclose(ptrOutFile);
 
 	puts("Done!\n\n");
 }
 
-void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 format 
+void ConvertMDLToDOL(const char * FileName)
 {
-	sModelHeader ModelHeader;					// Model file header
-	sModelTextureEntry * ModelTextureTable;		// Model texture table
-	ulong ModelTextureTableSize;				// Model texture table size (how many textures)
-	sDOLTextureHeader DOLTextureHeader;			// DOL Texture Header
-	sTexture * Textures;						// Pointer to textures data
-	
+	sModelHeader ModelHeader;
+	sModelTextureEntry * ModelTextureTable;
+	ulong ModelTextureTableSize;
+	sDOLTextureHeader DOLTextureHeader;
+	sTexture * Textures;
+
 	FILE * ptrInFile;
 	FILE * ptrOutFile;
 	char cOutFileName[PATH_LEN];
@@ -232,13 +197,9 @@ void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 form
 
 	ulong ModelSize;
 
-	// Open file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Get header from file
 	ModelHeader.UpdateFromFile(&ptrInFile);
 
-	// Check model
 	if (ModelHeader.CheckModel() == NORMAL_MODEL)
 	{
 		printf("Internal name: %s \nTextures: %i, Texture table offset: 0x%X \n", ModelHeader.Name, ModelHeader.TextureCount, ModelHeader.TextureTableOffset);
@@ -249,27 +210,28 @@ void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 form
 		return;
 	}
 
-	// Allocate memory for texture tables
+	// Print resize mode in use
+	if (g_UseScaleResize)
+		puts("Resize mode: SCALE (proportional stretch - recommended)");
+	else
+		puts("Resize mode: TILE (original behaviour)");
+
 	ModelTextureTableSize = ModelHeader.TextureCount * sizeof(sModelTextureEntry);
 	ModelTextureTable = (sModelTextureEntry *)malloc(ModelTextureTableSize);
 	Textures = (sTexture *)malloc(sizeof(sTexture) * ModelHeader.TextureCount);
 
-	// Convert textures
-	uint BitmapOffset;
-	uint BitmapSize;
-	uint PaletteOffset;
-	uint PaletteSize;
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	uint BitmapOffset, BitmapSize, PaletteOffset, PaletteSize;
+	bool anyBadTex = false;
+
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].UpdateFromFile(&ptrInFile, ModelHeader.TextureTableOffset, i);
-		//printf(" Texture #%i \n Name: %s \n Width: %i \n Height: %i \n Offset: 0x%X \n\n", i + 1, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height, ModelTextureTable[i].Offset);
 
-		// PVR check
 		char TexExtension[5];
 		FileGetExtension(ModelTextureTable[i].Name, TexExtension, sizeof(TexExtension));
 		if (!strcmp(TexExtension, ".pvr") == true)
 		{
-			UTIL_WAIT_KEY("Dreamcast model conversion is not suppotred ...");
+			UTIL_WAIT_KEY("Dreamcast model conversion is not supported ...");
 			exit(EXIT_FAILURE);
 		}
 
@@ -278,55 +240,72 @@ void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 form
 		PaletteOffset = ModelTextureTable[i].Offset + ModelTextureTable[i].Width * ModelTextureTable[i].Height;
 		PaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * MDL_PALETTE_ELEMENT_SIZE;
 
-		// Load texture
 		Textures[i].Initialize();
 		Textures[i].UpdateFromFile(&ptrInFile, BitmapOffset, BitmapSize, PaletteOffset, PaletteSize, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height);
-		
-		// Resize texture
-		Textures[i].TileResize(PSIProperSize(Textures[i].Width, false), PSIProperSize(Textures[i].Height, false));
-		
-		// Convert texture
+
+		// -------------------------------------------------------
+		// Warn about bad dimensions before resize
+		// -------------------------------------------------------
+		if (Textures[i].WarnIfBadDimensions())
+			anyBadTex = true;
+
+		// -------------------------------------------------------
+		// Resize: scale or tile depending on flag
+		// -------------------------------------------------------
+		uint TargetW = PSIProperSize(Textures[i].Width, false);
+		uint TargetH = PSIProperSize(Textures[i].Height, false);
+
+		if (TargetW != Textures[i].Width || TargetH != Textures[i].Height)
+		{
+			if (g_UseScaleResize)
+			{
+				printf("  Resizing \"%s\" %ux%u -> %ux%u (scale)\n", Textures[i].Name, Textures[i].Width, Textures[i].Height, TargetW, TargetH);
+				Textures[i].ScaleResize(TargetW, TargetH);
+			}
+			else
+			{
+				printf("  Resizing \"%s\" %ux%u -> %ux%u (tile)\n", Textures[i].Name, Textures[i].Width, Textures[i].Height, TargetW, TargetH);
+				Textures[i].TileResize(TargetW, TargetH);
+			}
+		}
+
 		Textures[i].PaletteReformat(MDL_PALETTE_ELEMENT_SIZE);
 		Textures[i].PaletteAddSpacers(0x80);
 	}
 
-	// Write results to output file
-	// Open output file
+	if (anyBadTex)
+		puts("\n[NOTE] One or more textures had non-power-of-2 dimensions and were resized.\n       If the game crashes, pre-resize textures in an image editor before converting.\n");
+
 	FileGetFullName(FileName, cOutFileName, sizeof(cOutFileName));
 	strcat(cOutFileName, ".dol");
 	SafeFileOpen(&ptrOutFile, cOutFileName, "wb");
 
-	// Write modified header
 	FileGetName(cOutFileName, cNewModelName, sizeof(cNewModelName), false);
 	strcat(cNewModelName, ".dol");
 	ModelHeader.Rename(cNewModelName);
-	ModelHeader.TextureDataOffset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2; // HotFix
-	ModelHeader.TextureDataOffset = (((ModelHeader.TextureDataOffset / 16) + ((ModelHeader.TextureDataOffset % 16) && 1)) * 16); // Fix for hotfix
+	ModelHeader.TextureDataOffset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
+	ModelHeader.TextureDataOffset = (((ModelHeader.TextureDataOffset / 16) + ((ModelHeader.TextureDataOffset % 16) && 1)) * 16);
 	FileWriteBlock(&ptrOutFile, (char *)&ModelHeader, sizeof(sModelHeader));
 
-	// Write patched model data
 	uchar * ModelData;
 	ModelData = (uchar *) malloc(ModelHeader.TextureTableOffset - sizeof(sModelHeader));
 	FileReadBlock(&ptrInFile, (char *) ModelData, sizeof(sModelHeader), ModelHeader.TextureTableOffset - sizeof(sModelHeader));
-	PatchDOLExtraSection((char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), 0, 0, 0, 0, 0);			// Reset extra section to it's default state
-	PatchSubmodelRef(&ModelHeader, (char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), ".dol");		// Patch internal submodel references
+	PatchDOLExtraSection((char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), 0, 0, 0, 0, 0);
+	PatchSubmodelRef(&ModelHeader, (char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), ".dol");
 	FileWriteBlock(&ptrOutFile, (char *) ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader));
 	free(ModelData);
 
-	// Write modified texture table
 	uint Offset = ModelHeader.TextureTableOffset + sizeof(sModelTextureEntry) * ModelHeader.TextureCount + ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
-	Offset = ((Offset / 16) + ((Offset % 16) && 1)) * 16; // Hotfix
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	Offset = ((Offset / 16) + ((Offset % 16) && 1)) * 16;
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].Width = Textures[i].Width;
 		ModelTextureTable[i].Height = Textures[i].Height;
 		ModelTextureTable[i].Offset = Offset;
-
 		Offset += sizeof(sDOLTextureHeader) + Textures[i].PaletteSize + Textures[i].Width * Textures[i].Height;
 	}
 	FileWriteBlock(&ptrOutFile, (char *) ModelTextureTable, ModelTextureTableSize);
 
-	// Write skin data
 	uchar * SkinTable;
 	ulong SkinTableSize = ModelHeader.SkinCount * ModelHeader.SkinEntrySize * 2;
 	SkinTable = (uchar *)malloc(SkinTableSize);
@@ -334,16 +313,13 @@ void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 form
 	FileWriteBlock(&ptrOutFile, SkinTable, SkinTableSize);
 	free(SkinTable);
 
-	// Write blank bytes to fill 16-byte block (PS2 HL likes everything to be alligned)
 	char Spacer = 0x00;
-	int SpacersCount = (FileSize(&ptrOutFile) / 16 + ((FileSize(&ptrOutFile) % 16) && 1)) * 16 - FileSize(&ptrOutFile);	// Fix for hotfix
-	for (int i = 0; i < SpacersCount ; i++)
+	int SpacersCount = (FileSize(&ptrOutFile) / 16 + ((FileSize(&ptrOutFile) % 16) && 1)) * 16 - FileSize(&ptrOutFile);
+	for (int i = 0; i < SpacersCount; i++)
 		FileWriteBlock(&ptrOutFile, &Spacer, 1);
 
-	// Write textures
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
-		// Remove ".bmp" in texture name
 		FileGetName(Textures[i].Name, cTextureName, sizeof(cTextureName), false);
 		DOLTextureHeader.Update(cTextureName, Textures[i].Width, Textures[i].Height);
 
@@ -352,47 +328,38 @@ void ConvertMDLToDOL(const char * FileName)	// Convert model from PC to PS2 form
 		FileWriteBlock(&ptrOutFile, (char *) Textures[i].Bitmap, Textures[i].Width * Textures[i].Height);
 	}
 
-	// Fetch data from external *.INI file (if present) and write it to DOL file
 	sDOLExtraSection DOLXS;
 	sDOLLODEntry * LODTable;
 	if (CheckExtraFile(FileName) == true)
 	{
-		// Get data from *.INI
 		TranslateExtraFile(FileName, &DOLXS, &LODTable);
 
-		// Rewrite extra section
 		DOLXS.LODDataOffset = FileSize(&ptrOutFile);
 		FileWriteBlock(&ptrOutFile, &DOLXS, sizeof(sModelHeader), sizeof(DOLXS));
 
-		// Write LOD table
 		if (LODTable != NULL)
 		{
 			FileWriteBlock(&ptrOutFile, LODTable, FileSize(&ptrOutFile), DOLXS.NumBodyGroups * DOLXS.MaxBodyParts * sizeof(sDOLLODEntry));
 			free(LODTable);
 		}
 
-		// Align data
 		uchar Align = (FileSize(&ptrOutFile) % 16) == 0 ? 0 : 16 - (FileSize(&ptrOutFile) % 16);
 		for (uchar i = 0; i < Align; i++)
 			fputc(0x11, ptrOutFile);
 	}
 
-	// Update model size field
 	ModelSize = FileSize(&ptrOutFile);
-	FileWriteBlock(&ptrOutFile, &ModelSize, 0x48, sizeof(ModelSize));	// 0x48 - address of model size field
+	FileWriteBlock(&ptrOutFile, &ModelSize, 0x48, sizeof(ModelSize));
 
-	// Free memory
 	free(ModelTextureTable);
 	free(Textures);
-
-	// Close files
 	fclose(ptrInFile);
 	fclose(ptrOutFile);
 
 	puts("Done!\n\n");
 }
 
-void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension)	// Convert submodel
+void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension)
 {
 	FILE * ptrModelFile;
 	FILE * ptrOutputFile;
@@ -407,40 +374,30 @@ void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * Tar
 
 	puts("Patching submodel ...");
 
-	// Open model file
 	SafeFileOpen(&ptrModelFile, FileName, "rb");
-
-	// Load header
 	ModelHeader.UpdateFromFile(&ptrModelFile);
 
-	// Check header
 	if (ModelHeader.CheckModel() != NOTEXTURES_MODEL && ModelHeader.CheckModel() != SEQ_MODEL)
 	{
 		puts("Invalid submodel ...");
 		return;
 	}
 
-	// Create new model file
 	FileGetFullName(FileName, OutputFile, sizeof(OutputFile));
 	strcat(OutputFile, TargetExtension);
 	SafeFileOpen(&ptrOutputFile, OutputFile, "wb");
 
-	// Update and write model header
 	FileGetName(FileName, NewModelName, sizeof(NewModelName), false);
 	strcat(NewModelName, TargetExtension);
 	ModelHeader.Rename(NewModelName);
 	FileWriteBlock(&ptrOutputFile, (char *)&ModelHeader, sizeof(sModelHeader));
 
-	// Write patched model data
 	ModelDataSize = FileSize(&ptrModelFile) - sizeof(sModelHeader);
 	ModelData = (char *)malloc(ModelDataSize);
 	FileReadBlock(&ptrModelFile, ModelData, sizeof(sModelHeader), ModelDataSize);
-	if (ModelHeader.CheckModel() == NOTEXTURES_MODEL)	// Apply patch to "IDST" models only
+	if (ModelHeader.CheckModel() == NOTEXTURES_MODEL)
 	{
-		// Patch references
 		PatchSubmodelRef(&ModelHeader, ModelData, ModelDataSize, TargetExtension);
-
-		// Clear extra field
 		if (!strcmp(OriginalExtension, ".mdl") == true)
 			PatchDOLExtraSection((char *)ModelData, ModelHeader.TextureTableOffset - sizeof(sModelHeader), 0, 0, 0, 0, 0);
 		else
@@ -448,16 +405,13 @@ void ConvertSubmodel(const char * FileName, char * OriginalExtension, char * Tar
 	}
 	FileWriteBlock(&ptrOutputFile, ModelData, ModelDataSize);
 
-	// Free memory
 	free(ModelData);
-
-	// Close file
 	fclose(ptrModelFile);
 
 	puts("Done!\n\n");
 }
 
-void ConvertDummySubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension)	// Convert submodel which consists of signature and name only
+void ConvertDummySubmodel(const char * FileName, char * OriginalExtension, char * TargetExtension)
 {
 	FILE * ptrModelFile;
 	FILE * ptrOutputFile;
@@ -470,28 +424,22 @@ void ConvertDummySubmodel(const char * FileName, char * OriginalExtension, char 
 
 	puts("Patching dummy submodel ...");
 
-	// Open model file
 	SafeFileOpen(&ptrModelFile, FileName, "rb");
 
-	// Create new model file
 	FileGetFullName(FileName, OutputFile, sizeof(OutputFile));
 	strcat(OutputFile, TargetExtension);
 	SafeFileOpen(&ptrOutputFile, OutputFile, "wb");
 	FileGetName(OutputFile, NewInternalName, sizeof(NewInternalName), true);
 
-	// Write patched model data
 	ModelDataSize = FileSize(&ptrModelFile);
 	ModelData = (char *)malloc(ModelDataSize);
 	FileReadBlock(&ptrModelFile, ModelData, 0, ModelDataSize);
-	for (uchar c = 8; ModelData[c] != '\0'; c++)	// Clear old name, 8 - offset of internal name
+	for (uchar c = 8; ModelData[c] != '\0'; c++)
 		ModelData[c] = '\0';
-	strcpy(&ModelData[8], NewInternalName);			// Copy new name, 8 - offset of internal name
+	strcpy(&ModelData[8], NewInternalName);
 	FileWriteBlock(&ptrOutputFile, ModelData, ModelDataSize);
 
-	// Free memory
 	free(ModelData);
-
-	// Close file
 	fclose(ptrModelFile);
 
 	puts("Done!\n\n");
@@ -504,13 +452,9 @@ void GetExtraDOLData(const char * FileName)
 	char cOutFileName[PATH_LEN];
 	sDOLExtraSection DOLExtraSect;
 
-	// Open input file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Read extra section
 	FileReadBlock(&ptrInFile, &DOLExtraSect, sizeof(sModelHeader), sizeof(sDOLExtraSection));
-	
-	// Check if *.INF file is needed
+
 	ulong LODTableSize = DOLExtraSect.MaxBodyParts * DOLExtraSect.NumBodyGroups * sizeof(sDOLLODEntry);
 	if ((DOLExtraSect.FadeStart != 0 || DOLExtraSect.FadeEnd != 0) || LODTableSize != 0)
 	{
@@ -518,36 +462,26 @@ void GetExtraDOLData(const char * FileName)
 
 		puts("Fetching extra data ...");
 
-		//// Open output *.INF file
 		FileGetFullName(FileName, cOutFileName, sizeof(cOutFileName));
 		strcat(cOutFileName, ".inf");
 		SafeFileOpen(&ptrOutFile, cOutFileName, "wb");
 
-
-		//// Write output file
 		fprintf(ptrOutFile, "\\\\ General data\r\n\r\n");
 
-		// Write fade data
 		if (DOLExtraSect.FadeStart != 0)
 			fprintf(ptrOutFile, "%s[%d]\r\n", KWD_FADESTART, DOLExtraSect.FadeStart);
-
 		if (DOLExtraSect.FadeEnd != 0)
 			fprintf(ptrOutFile, "%s[%d]\r\n", KWD_FADEEND, DOLExtraSect.FadeEnd);
-		
-		// Write LOD data
+
 		if (LODTableSize != 0)
 		{
-			//// Write LOD data from header
 			fprintf(ptrOutFile, "%s[%d]\r\n", KWD_NUMGROUPS, DOLExtraSect.NumBodyGroups);
 			fprintf(ptrOutFile, "%s[%d]\r\n\r\n\r\n", KWD_MAXPARTS, DOLExtraSect.MaxBodyParts);
-			
 
-			//// Write data from LOD table
 			fprintf(ptrOutFile, "\\\\ LOD table. Distances for each LOD are inside [].\r\n");
 			fprintf(ptrOutFile, "\\\\ If you plan to use this model on PC then consider\r\n");
 			fprintf(ptrOutFile, "\\\\ decompiling the model and removing LOD body parts.\r\n\r\n");
 
-			// Read LOD table
 			LODTable = (sDOLLODEntry *)malloc(LODTableSize);
 			if (LODTable == NULL)
 			{
@@ -557,7 +491,6 @@ void GetExtraDOLData(const char * FileName)
 			}
 			FileReadBlock(&ptrInFile, LODTable, DOLExtraSect.LODDataOffset, LODTableSize);
 
-			// Parse LOD table
 			for (ushort Group = 0, Entry = 0; Group < DOLExtraSect.NumBodyGroups; Group++)
 			{
 				fprintf(ptrOutFile, "%s\r\n{\r\n", KWD_GROUP);
@@ -581,22 +514,15 @@ void GetExtraDOLData(const char * FileName)
 			}
 		}
 
-		//// Close output file
 		fclose(ptrOutFile);
 	}
 
-	// Close input file
 	fclose(ptrInFile);
 }
-
-///////////////////////////////////////
-//////////////////////////////////////////
-////////////////////////////////////////////
 
 bool AddTerminator(char * Buffer, char Symbol)
 {
 	bool Result = false;
-
 	for (ushort i = 0; Buffer[i] != '\0'; i++)
 	{
 		if (Buffer[i] == Symbol)
@@ -606,64 +532,45 @@ bool AddTerminator(char * Buffer, char Symbol)
 			break;
 		}
 	}
-
 	return Result;
 }
 
 ushort CountSymbols(char * Buffer, char Symbol)
 {
 	ushort Result = 0;
-
 	for (ushort i = 0; Buffer[i] != '\0'; i++)
-	{
 		if (Buffer[i] == Symbol)
 			Result++;
-	}
-
 	return Result;
 }
 
 bool CheckExtraFile(const char * FileName)
 {
-	char cInFileName[PATH_LEN]; // Input file name
-	FILE * ptrInFile;		// Input file stream
-	char Buffer[128];		// Text buffer
-	ushort Open = 0;		// Open brackets count
-	ushort Close = 0;		// Close brackets count
+	char cInFileName[PATH_LEN];
+	FILE * ptrInFile;
+	char Buffer[128];
+	ushort Open = 0, Close = 0;
 
 	puts("Checking *.INF file ...");
 
-	// Open input *.INF file
 	FileGetFullName(FileName, cInFileName, sizeof(cInFileName));
 	strcat(cInFileName, ".inf");
 	ptrInFile = fopen(cInFileName, "rb");
 	if (ptrInFile == NULL)
 		return false;
 
-	// Count '[' and ']'
 	Open = Close = 0;
 	while (fgets(Buffer, sizeof(Buffer), ptrInFile) != NULL)
 	{
 		ushort Len = strlen(Buffer);
-
-		// Skip comments
 		if (Buffer[0] == '\\' && Buffer[1] == '\\')
 			continue;
-
-		// Ckeck '[' and ']'
 		for (ushort i = 0; i < Len; i++)
 		{
-			if (Buffer[i] == '[')
-			{
-				Open++;
-			}
-
+			if (Buffer[i] == '[') Open++;
 			if (Buffer[i] == ']')
 			{
-				if (Open == (Close + 1))
-				{
-					Close++;
-				}
+				if (Open == (Close + 1)) Close++;
 				else
 				{
 					puts("Invalid [] order !");
@@ -672,16 +579,14 @@ bool CheckExtraFile(const char * FileName)
 				}
 			}
 		}
-
 		if (Open != Close)
 		{
-			puts("Both \'[\' and \']\' should be on one line !");
+			puts("Both '[' and ']' should be on one line !");
 			fclose(ptrInFile);
 			return false;
 		}
 	}
 
-	// Check if empty
 	if (Open == 0 && Close == 0)
 	{
 		puts("*.INF file is empty, skipping ...");
@@ -689,42 +594,26 @@ bool CheckExtraFile(const char * FileName)
 		return false;
 	}
 
-	// Check for parity
 	if (Open != Close)
 	{
-		puts("Number of \'[\' not matches \']\' ...");
+		puts("Number of '[' not matches ']' ...");
 		fclose(ptrInFile);
 		return false;
 	}
 
 	printf("Found %d active lines \n", Open);
-
-	// Rewind file pointer
 	fseek(ptrInFile, 0, SEEK_SET);
 
-	// Count '{' and '}'
 	Open = Close = 0;
 	while (fgets(Buffer, sizeof(Buffer), ptrInFile) != NULL)
 	{
-		// Remove newline symbols
 		AddTerminator(Buffer, '\r');
 		AddTerminator(Buffer, '\n');
-
-		// Skip comments
-		if (Buffer[0] == '\\' && Buffer[1] == '\\')
-			continue;
-
-		// Ckeck '{' and '}'
-		if (!strcmp(Buffer, "{") == true)
-		{
-			Open++;
-		}
+		if (Buffer[0] == '\\' && Buffer[1] == '\\') continue;
+		if (!strcmp(Buffer, "{") == true) Open++;
 		if (!strcmp(Buffer, "}") == true)
 		{
-			if (Open == (Close + 1))
-			{
-				Close++;
-			}
+			if (Open == (Close + 1)) Close++;
 			else
 			{
 				puts("Invalid {} order !");
@@ -734,162 +623,88 @@ bool CheckExtraFile(const char * FileName)
 		}
 	}
 
-	// Check for parity
 	if (Open != Close)
 	{
-		puts("Number of \'{\' not matches \'}\' !");
+		puts("Number of '{' not matches '}' !");
 		fclose(ptrInFile);
 		return false;
 	}
 
 	printf("Found %d body groups \n", Open);
-
-	// Close file
 	fclose(ptrInFile);
-
 	return true;
 }
 
 void GetValues(char * Buffer, ulong * Values, uchar ValuesCount)
 {
-	// Find string length
 	ushort Len = strlen(Buffer);
-
-	// Clear Values
 	memset(Values, 0x00, ValuesCount * sizeof(ulong));
 
-	// Fetch values
 	char NumBuffer[80];
-	bool NumFound = false;
 	uchar NumStart = 0;
 	uchar CurrentVal = 0;
 	for (ushort i = 0; i < Len; i++)
 	{
-		if (Buffer[i] == '[')
-		{
-			NumStart = i + 1;
-		}
+		if (Buffer[i] == '[') NumStart = i + 1;
 		else if (Buffer[i] == ',' || Buffer[i] == ']')
 		{
-			// Clear buffer
 			memset(NumBuffer, 0x00, sizeof(NumBuffer));
-
 			if ((i - NumStart) != 0)
 			{
-				// Check for values
 				if (CurrentVal >= ValuesCount)
 				{
 					puts("Too many values, skipping the rest of them ...\n");
 					break;
 				}
-
-				// Get value from string
 				memcpy(NumBuffer, &Buffer[NumStart], i - NumStart);
 				sscanf(NumBuffer, "%d", &Values[CurrentVal]);
-
-				// Increnemt current value number
 				CurrentVal++;
-
-				// Current end = next start
 				NumStart = i + 1;
 			}
 		}
-
-		if (Buffer[i] == ']')
-		{
-			break;
-		}
+		if (Buffer[i] == ']') break;
 	}
 }
 
 bool TranslateExtraFile(const char * FileName, sDOLExtraSection * DOLExtraSect, sDOLLODEntry ** LODTable)
 {
-	FILE * ptrInFile;					// Input file stream
-	char cInFileName[PATH_LEN];			// Input file name
-	char Buffer[128] = "Text";			// Text buffer
-	char PrevBuffer[128] = "Text";		// Previous state of text buffer
-	bool Group = true;					// Map or model
+	FILE * ptrInFile;
+	char cInFileName[PATH_LEN];
+	char Buffer[128] = "Text";
+	char PrevBuffer[128] = "Text";
+	bool Group = true;
 
-	//// Open input *.INF file
 	FileGetFullName(FileName, cInFileName, sizeof(cInFileName));
 	strcat(cInFileName, ".inf");
 	SafeFileOpen(&ptrInFile, cInFileName, "rb");
 
-	//// Clear extra section
 	memset(DOLExtraSect, 0x00, sizeof(sDOLExtraSection));
 
-	//// Fetch parameters from file (first pass, two passes are needed in case someone places "bodys" and "maxparts" parameters in the end of a file)
 	Group = false;
 	while (fgets(Buffer, sizeof(Buffer), ptrInFile) != NULL)
 	{
-		// Remove newline symbols
 		AddTerminator(Buffer, '\r');
 		AddTerminator(Buffer, '\n');
+		if ((Buffer[0] == '\\' && Buffer[1] == '\\') || Buffer[0] == '\0') { PrevBuffer[0] = '\0'; continue; }
 
-		// Skip comments and empty lines
-		if ((Buffer[0] == '\\' && Buffer[1] == '\\') || Buffer[0] == '\0')
-		{
-			PrevBuffer[0] = '\0';
-			continue;
-		}
-
-		// Fetch general parameters (outside of {})
-		if (Buffer[0] == '{' && Buffer[1] == '\0')
-		{
-			Group = true;
-		}
-		else if (Buffer[0] == '}' && Buffer[1] == '\0')
-		{
-			Group = false;
-		}
+		if (Buffer[0] == '{' && Buffer[1] == '\0') Group = true;
+		else if (Buffer[0] == '}' && Buffer[1] == '\0') Group = false;
 		else
 		{
-			if (Group == false)
+			if (Group == false && CountSymbols(Buffer, '[') != 0)
 			{
-				if (CountSymbols(Buffer, '[') != 0)
-				{
-					ulong Value = 0;
+				ulong Value = 0;
+				GetValues(Buffer, &Value, 1);
+				AddTerminator(Buffer, '[');
 
-					GetValues(Buffer, &Value, 1);
-					AddTerminator(Buffer, '[');
-
-					if (!strcmp(Buffer, KWD_FADESTART) == true)
-					{
-						// Fade start distance
-						DOLExtraSect->FadeStart = Value;
-						if (DOLExtraSect->FadeEnd == 0)
-							DOLExtraSect->FadeEnd = Value;
-						puts("Got fade start value ...");
-					}
-					else if (!strcmp(Buffer, KWD_FADEEND) == true)
-					{
-						// Fade end distance
-						DOLExtraSect->FadeEnd = Value;
-						if (DOLExtraSect->FadeStart == 0)
-							DOLExtraSect->FadeStart = Value;
-						puts("Got fade end value ...");
-					}
-					else if (!strcmp(Buffer, KWD_NUMGROUPS) == true)
-					{
-						// Number of body groups
-						DOLExtraSect->NumBodyGroups = Value;
-						puts("Got number of body groups ...");
-					}
-					else if (!strcmp(Buffer, KWD_MAXPARTS) == true)
-					{
-						// Max number of body parts
-						DOLExtraSect->MaxBodyParts = Value;
-						puts("Got maximum number of body parts ...");
-					}
-				}
+				if (!strcmp(Buffer, KWD_FADESTART) == true) { DOLExtraSect->FadeStart = Value; if (DOLExtraSect->FadeEnd == 0) DOLExtraSect->FadeEnd = Value; puts("Got fade start value ..."); }
+				else if (!strcmp(Buffer, KWD_FADEEND) == true) { DOLExtraSect->FadeEnd = Value; if (DOLExtraSect->FadeStart == 0) DOLExtraSect->FadeStart = Value; puts("Got fade end value ..."); }
+				else if (!strcmp(Buffer, KWD_NUMGROUPS) == true) { DOLExtraSect->NumBodyGroups = Value; puts("Got number of body groups ..."); }
+				else if (!strcmp(Buffer, KWD_MAXPARTS) == true) { DOLExtraSect->MaxBodyParts = Value; puts("Got maximum number of body parts ..."); }
 			}
 		}
 	}
 
-	
-	//// Fetch LOD table (second pass)
-
-	// Check if LOD table is needed
 	if (DOLExtraSect->NumBodyGroups * DOLExtraSect->MaxBodyParts == 0)
 	{
 		*LODTable = NULL;
@@ -898,252 +713,135 @@ bool TranslateExtraFile(const char * FileName, sDOLExtraSection * DOLExtraSect, 
 	}
 
 	puts("Fetching LOD table ...");
-
-	// Rewind input file
 	rewind(ptrInFile);
 
-	// Allocate memory for LOD table
 	ulong LODTableSz = DOLExtraSect->NumBodyGroups * DOLExtraSect->MaxBodyParts * sizeof(sDOLLODEntry);
 	*LODTable = (sDOLLODEntry *) calloc(1, LODTableSz);
-	if (*LODTable == NULL)
-	{
-		puts("Can't allocate memory!");
-		return false;
-	}
+	if (*LODTable == NULL) { puts("Can't allocate memory!"); return false; }
 
-	// Fill table
-	uchar GroupCount = 0;				// Number of body groups
-	uchar PartCount = 0;				// Number of body parts
-	ushort EntryNum = 0;				// Current entry number
-	Group = false;						// Group flag
+	uchar GroupCount = 0, PartCount = 0;
+	ushort EntryNum = 0;
+	Group = false;
 	while (fgets(Buffer, sizeof(Buffer), ptrInFile) != NULL)
 	{
-		// Remove newline symbols
 		AddTerminator(Buffer, '\r');
 		AddTerminator(Buffer, '\n');
+		if ((Buffer[0] == '\\' && Buffer[1] == '\\') || Buffer[0] == '\0') { PrevBuffer[0] = '\0'; continue; }
 
-		// Skip comments and empty lines
-		if ((Buffer[0] == '\\' && Buffer[1] == '\\') || Buffer[0] == '\0')
-		{
-			PrevBuffer[0] = '\0';
-			continue;
-		}
-			
-
-		// Fetch LOD table (inside of {})
 		if (Buffer[0] == '{' && Buffer[1] == '\0')
 		{
 			printf("Fetching group #%d: \t\"%s\"\n", GroupCount, PrevBuffer);
-			
-			// Check if out of bounds
-			if (GroupCount >= DOLExtraSect->NumBodyGroups)
-			{
-				printf("Group #%d is out of bounds, ignoring the rest of the file\n", GroupCount);
-				break;
-			}
-
-			// Set body group flag and reset parts count for this group
-			Group = true;
-			PartCount = 0;
-
-			// Bring entry number to the beginning of the new group (needed to allow not putting "blank" lines in the end of groups with part count < max part count)
+			if (GroupCount >= DOLExtraSect->NumBodyGroups) { printf("Group #%d is out of bounds\n", GroupCount); break; }
+			Group = true; PartCount = 0;
 			EntryNum = GroupCount * DOLExtraSect->MaxBodyParts;
 		}
 		else if (Buffer[0] == '}' && Buffer[1] == '\0')
 		{
-			// Unset body group flag
-			Group = false;
-
-			// Increnent group count
-			GroupCount++;
+			Group = false; GroupCount++;
 		}
-		else
+		else if (Group == true)
 		{
-			if (Group == true)
+			if (CountSymbols(Buffer, '[') != 0)
 			{
-				if (CountSymbols(Buffer, '[') != 0)
-				{
-					// Check if out of bounds
-					if (PartCount >= DOLExtraSect->MaxBodyParts)
-					{
-						printf("Part #%d is out of bounds, skipping ...\n", PartCount);
-						PartCount++;
-						EntryNum++;
-						continue;
-					}
-
-					// Fetch
-					uchar ValuesCnt = CountSymbols(Buffer, ',') + 1;
-					if (ValuesCnt > 4)	// Prevent going out of bounds
-						ValuesCnt = 4;
-					(*LODTable)[EntryNum].LODCount = ValuesCnt;
-					GetValues(Buffer, (*LODTable)[EntryNum].LODDistances, ValuesCnt);
-					AddTerminator(Buffer, '[');
-					printf("Fetched part #%d: \t\"%s\"\n", PartCount, Buffer);
-					
-					// Increnent part and entry counters
-					PartCount++;
-					EntryNum++;
-				}
-				else
-				{
-					//if (!strcmp(Buffer, KWD_BLANK) == true)
-					//{
-						// Check if out of bounds
-						if (PartCount >= DOLExtraSect->MaxBodyParts)
-						{
-							printf("Part #%d is out of bounds, skipping ...\n", PartCount);
-							PartCount++;
-							EntryNum++;
-							continue;
-						}
-						
-						// Fetch (in this case do nothing as entry already should be nulled out)
-						printf("Fetched blank part #%d\n", PartCount);
-
-						// Increnent part and entry counters
-						PartCount++;
-						EntryNum++;
-					//}
-				}
+				if (PartCount >= DOLExtraSect->MaxBodyParts) { printf("Part #%d is out of bounds, skipping ...\n", PartCount); PartCount++; EntryNum++; continue; }
+				uchar ValuesCnt = CountSymbols(Buffer, ',') + 1;
+				if (ValuesCnt > 4) ValuesCnt = 4;
+				(*LODTable)[EntryNum].LODCount = ValuesCnt;
+				GetValues(Buffer, (*LODTable)[EntryNum].LODDistances, ValuesCnt);
+				AddTerminator(Buffer, '[');
+				printf("Fetched part #%d: \t\"%s\"\n", PartCount, Buffer);
+				PartCount++; EntryNum++;
+			}
+			else
+			{
+				if (PartCount >= DOLExtraSect->MaxBodyParts) { printf("Part #%d is out of bounds, skipping ...\n", PartCount); PartCount++; EntryNum++; continue; }
+				printf("Fetched blank part #%d\n", PartCount);
+				PartCount++; EntryNum++;
 			}
 		}
 
 		strcpy(PrevBuffer, Buffer);
 	}
 
-	//// Close input file
 	fclose(ptrInFile);
-
 	return true;
 }
-///////////////////////////////////////
-///////////////////////////////////
-//////////////////////////////
 
-void PatchSubmodelRef(sModelHeader * MdlHdr, char * ModelData, ulong ModelDataSize, char * NewExtension)		// Patch internal submodel references
+void PatchSubmodelRef(sModelHeader * MdlHdr, char * ModelData, ulong ModelDataSize, char * NewExtension)
 {
-	// Check if patching is needed
-	if (MdlHdr->SubmodelCount <= 1)
-		return;
-
-	// Don't patch empty model
-	if (ModelDataSize < 4 || strlen(NewExtension) != 4)
-		return;
+	if (MdlHdr->SubmodelCount <= 1) return;
+	if (ModelDataSize < 4 || strlen(NewExtension) != 4) return;
 
 	printf("Found %i internal submodel reference(s), patching ...\n", MdlHdr->SubmodelCount - 1);
-	
-	// Calculate offset to first submodel reference
+
 	ulong Offset = MdlHdr->SubmodelTableOffset - sizeof(sModelHeader) + MDL_DEF_REF_SZ + MDL_FILE_REF_SPACE;
-	
-	// Patch
+
 	char * RefName;
 	for (ulong i = 0; i < MdlHdr->SubmodelCount - 1; i++, Offset += (MDL_FILE_REF_SZ + MDL_FILE_REF_SPACE))
 	{
-		// Redundant check?
-		if (Offset + MDL_FILE_REF_SZ > ModelDataSize)
-		{
-			puts("Oops, model data is too small. Patching failed ...");
-			return;
-		}
+		if (Offset + MDL_FILE_REF_SZ > ModelDataSize) { puts("Oops, model data is too small. Patching failed ..."); return; }
 
-		// Set pointer to the beginning of reference string
 		RefName = &ModelData[Offset];
-
-		// Rewind pointer to the end of reference string
 		char Counter = 0;
 		while (*RefName != '\0')
 		{
 			RefName++;
 			Counter++;
-			if (Counter > MDL_FILE_REF_SZ)
-			{
-				puts("Oops, erroneous reference. Patching failed ...");
-				return;
-			}
+			if (Counter > MDL_FILE_REF_SZ) { puts("Oops, erroneous reference. Patching failed ..."); return; }
 		}
-
-		// Replace four last characters with new extension letters
 		RefName -= 4;
 		memcpy(RefName, NewExtension, 4);
 	}
 }
 
-uint PSIProperSize(uint Size, bool ToLower)	// Function returns closest proper dimension. PS2 HL proper PSI dimensions: 8 (min), 16, 32, 64, 128, 256, 512, ...
+uint PSIProperSize(uint Size, bool ToLower)
 {
-	uint CurrentSize;
-
-	// Calculate closest (bigger or equal) proper dimension
-	CurrentSize = PSI_MIN_DIMENSION;
+	uint CurrentSize = PSI_MIN_DIMENSION;
 	while (CurrentSize < Size)
-		CurrentSize <<= 1; // *= 2;
+		CurrentSize <<= 1;
 
-	// Return proper dimension
-	if (Size <= PSI_MIN_DIMENSION)
-	{
-		return PSI_MIN_DIMENSION;
-	}
+	if (Size <= PSI_MIN_DIMENSION) return PSI_MIN_DIMENSION;
 	else
 	{
-		if (Size == CurrentSize)
-		{
-			return CurrentSize;
-		}
+		if (Size == CurrentSize) return CurrentSize;
 		else
 		{
-			if (ToLower == true)
-				return CurrentSize >>= 1; // / 2;
-			else
-				return CurrentSize;
+			if (ToLower == true) return CurrentSize >>= 1;
+			else return CurrentSize;
 		}
 	}
 }
 
-void ExtractDOLTextures(const char * FileName)	// Extract textures from PS2 model
+void ExtractDOLTextures(const char * FileName)
 {
-	sModelHeader ModelHeader;					// Model file header
-	sModelTextureEntry * ModelTextureTable;		// Model texture table
-	ulong ModelTextureTableSize;				// Model texture table size (how many textures)
-	sTexture * Textures;						// Pointer to texturs data
+	sModelHeader ModelHeader;
+	sModelTextureEntry * ModelTextureTable;
+	ulong ModelTextureTableSize;
+	sTexture * Textures;
 
 	FILE * ptrInFile;
-	sBMPHeader BMPHeader;						// BMP header
+	sBMPHeader BMPHeader;
 	FILE * ptrBMPOutput;
 	char cOutFileName[PATH_LEN];
 	char cOutFolderName[PATH_LEN];
 
-	// Open file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Load model header
 	ModelHeader.UpdateFromFile(&ptrInFile);
 
-	// Check model
 	if (ModelHeader.CheckModel() == NORMAL_MODEL)
-	{
 		printf("Internal name: %s \nTextures: %i, Texture table offset: 0x%X \n", ModelHeader.Name, ModelHeader.TextureCount, ModelHeader.TextureTableOffset);
-	}
-	else
-	{
-		puts("Can't extract textures.");
-		return;
-	}
+	else { puts("Can't extract textures."); return; }
 
-	// Allocate memory for textures
 	ModelTextureTable = (sModelTextureEntry *)malloc(ModelHeader.TextureCount * sizeof(sModelTextureEntry));
 	Textures = (sTexture *)malloc(sizeof(sTexture) * ModelHeader.TextureCount);
 
-	// Prepare folder for output files
 	strcpy(cOutFolderName, FileName);
 	strcat(cOutFolderName, "-textures");
 	strcat(cOutFolderName, DIR_DELIM);
 	NewDir(cOutFolderName);
 
-	uint BitmapOffset;
-	uint BitmapSize;
-	uint PaletteOffset;
-	uint PaletteSize;
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	uint BitmapOffset, BitmapSize, PaletteOffset, PaletteSize;
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].UpdateFromFile(&ptrInFile, ModelHeader.TextureTableOffset, i);
 		printf(" Texture #%i \n Name: %s \n Width: %i \n Height: %i \n Offset: %x \n\n", i + 1, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height, ModelTextureTable[i].Offset);
@@ -1153,18 +851,15 @@ void ExtractDOLTextures(const char * FileName)	// Extract textures from PS2 mode
 		PaletteOffset = ModelTextureTable[i].Offset + DOL_TEXTURE_HEADER_SIZE;
 		PaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * DOL_BMP_PALETTE_ELEMENT_SIZE;
 
-		// Load texture
 		Textures[i].Initialize();
 		Textures[i].UpdateFromFile(&ptrInFile, BitmapOffset, BitmapSize, PaletteOffset, PaletteSize, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height);
 
-		// Convert texture
 		Textures[i].FlipBitmap();
 		Textures[i].PaletteReformat(DOL_BMP_PALETTE_ELEMENT_SIZE);
 		Textures[i].PaletteRemoveSpacers();
 		Textures[i].PaletteAddSpacers(0x00);
 		Textures[i].PaletteSwapRedAndGreen(DOL_BMP_PALETTE_ELEMENT_SIZE);
 
-		// Save texture to *.bmp
 		strcpy(cOutFileName, cOutFolderName);
 		strcat(cOutFileName, ModelTextureTable[i].Name);
 		SafeFileOpen(&ptrBMPOutput, cOutFileName, "wb");
@@ -1177,98 +872,68 @@ void ExtractDOLTextures(const char * FileName)	// Extract textures from PS2 mode
 		fclose(ptrBMPOutput);
 	}
 
-	// Free memory
 	free(ModelTextureTable);
 	free(Textures);
-
-	// Close files
 	fclose(ptrInFile);
-
 	puts("Done!\n\n");
 }
 
-void ExtractMDLTextures(const char * FileName)	// Extract textures from PC model
+void ExtractMDLTextures(const char * FileName)
 {
-	sModelHeader ModelHeader;					// Model file header
-	sModelTextureEntry * ModelTextureTable;		// Model texture table
-	ulong ModelTextureTableSize;				// Model texture table size (how many textures)
-	sTexture * Textures;						// Pointer to textures data
+	sModelHeader ModelHeader;
+	sModelTextureEntry * ModelTextureTable;
+	ulong ModelTextureTableSize;
+	sTexture * Textures;
 
 	FILE * ptrInFile;
-	sBMPHeader BMPHeader;						// BMP header
+	sBMPHeader BMPHeader;
 	FILE * ptrBMPOutput;
 	char cOutFileName[PATH_LEN];
 	char cOutFolderName[PATH_LEN];
 
-	// Open file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Load model header
 	ModelHeader.UpdateFromFile(&ptrInFile);
 
-	// Check model
 	if (ModelHeader.CheckModel() == NORMAL_MODEL)
-	{
 		printf("Internal name: %s \nTextures: %i, Texture table offset: 0x%X \n", ModelHeader.Name, ModelHeader.TextureCount, ModelHeader.TextureTableOffset);
-	}
-	else
-	{
-		puts("Can't extract textures.");
-		return;
-	}
+	else { puts("Can't extract textures."); return; }
 
-	// Allocate memory for textutes
 	ModelTextureTable = (sModelTextureEntry *)malloc(ModelHeader.TextureCount * sizeof(sModelTextureEntry));
 	Textures = (sTexture *)malloc(sizeof(sTexture) * ModelHeader.TextureCount);
 
-	// Prepare folder for output files
 	strcpy(cOutFolderName, FileName);
 	strcat(cOutFolderName, "-textures");
 	strcat(cOutFolderName, DIR_DELIM);
 	NewDir(cOutFolderName);
 
-	uint BitmapOffset;
-	uint BitmapSize;
-	uint PaletteOffset;
-	uint PaletteSize;
+	uint BitmapOffset, BitmapSize, PaletteOffset, PaletteSize;
 	bool RawExtract = false;
 	char TexExtension[5];
-	for (int i = 0; i < ModelHeader.TextureCount; i++)
+	for (int i = 0; i < (int)ModelHeader.TextureCount; i++)
 	{
 		ModelTextureTable[i].UpdateFromFile(&ptrInFile, ModelHeader.TextureTableOffset, i);
 		printf(" Texture #%i \n Name: %s \n Width: %i \n Height: %i \n Offset: %x \n\n", i + 1, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height, ModelTextureTable[i].Offset);
 
-		// PVR check
 		if (RawExtract == false)
 		{
 			FileGetExtension(ModelTextureTable[i].Name, TexExtension, sizeof(TexExtension));
-			if (!strcmp(TexExtension, ".pvr") == true)
-			{
-				RawExtract = true;
-				puts("Dreamcast textures found ...");
-			}
+			if (!strcmp(TexExtension, ".pvr") == true) { RawExtract = true; puts("Dreamcast textures found ..."); }
 		}
 
-		// Extract texture
 		if (RawExtract == false)
 		{
-			// Normal texture //
-
 			BitmapOffset = ModelTextureTable[i].Offset + MDL_TEXTURE_HEADER_SIZE;
 			BitmapSize = ModelTextureTable[i].Height * ModelTextureTable[i].Width;
 			PaletteOffset = ModelTextureTable[i].Offset + ModelTextureTable[i].Width * ModelTextureTable[i].Height;
 			PaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * MDL_PALETTE_ELEMENT_SIZE;
 
-			// Load texture
 			Textures[i].Initialize();
 			Textures[i].UpdateFromFile(&ptrInFile, BitmapOffset, BitmapSize, PaletteOffset, PaletteSize, ModelTextureTable[i].Name, ModelTextureTable[i].Width, ModelTextureTable[i].Height);
 
-			// Convert texture
 			Textures[i].FlipBitmap();
 			Textures[i].PaletteSwapRedAndGreen(MDL_PALETTE_ELEMENT_SIZE);
 			Textures[i].PaletteAddSpacers(0x00);
 
-			// Save texture to *.bmp file
 			strcpy(cOutFileName, cOutFolderName);
 			strcat(cOutFileName, ModelTextureTable[i].Name);
 			SafeFileOpen(&ptrBMPOutput, cOutFileName, "wb");
@@ -1280,215 +945,130 @@ void ExtractMDLTextures(const char * FileName)	// Extract textures from PC model
 		}
 		else
 		{
-			// PVR texture (raw extract) //
-
 			uchar * pPVR;
 			uint PVRSize;
 
-			// Get size
-			if (i != ModelHeader.TextureCount - 1)
+			if (i != (int)ModelHeader.TextureCount - 1)
 			{
 				ModelTextureTable[i + 1].UpdateFromFile(&ptrInFile, ModelHeader.TextureTableOffset, i + 1);
 				PVRSize = ModelTextureTable[i + 1].Offset - ModelTextureTable[i].Offset;
 			}
 			else
 			{
-				PVRSize = FileSize(&ptrInFile) - ModelTextureTable[i].Offset;	// Last entry in the texture table
+				PVRSize = FileSize(&ptrInFile) - ModelTextureTable[i].Offset;
 			}
 
-			// Allocate memory
 			pPVR = (uchar *)malloc(PVRSize);
-			if (pPVR == NULL)
-			{
-				puts("Unable to allocate memory ...");
-				exit(EXIT_FAILURE);
-			}
-			
-			// Read texture
+			if (pPVR == NULL) { puts("Unable to allocate memory ..."); exit(EXIT_FAILURE); }
+
 			FileReadBlock(&ptrInFile, pPVR, ModelTextureTable[i].Offset, PVRSize);
 
-			// Open output file
 			strcpy(cOutFileName, cOutFolderName);
 			strcat(cOutFileName, ModelTextureTable[i].Name);
 			SafeFileOpen(&ptrBMPOutput, cOutFileName, "wb");
 
-			// Write texture
 			FileWriteBlock(&ptrBMPOutput, pPVR, PVRSize);
-
-			// Free memory
 			free(pPVR);
 		}
 
-		// Close output file
 		fclose(ptrBMPOutput);
 	}
 
-	// Free memory
 	free(ModelTextureTable);
 	free(Textures);
-
-	// Close files
 	fclose(ptrInFile);
-
 	puts("Done!\n\n");
 }
 
 void SeqReport(const char * FileName)
 {
-	sModelHeader ModelHeader;	// Model file header
-	sModelSeq * SeqTable;		// Sequences table
-	ulong SeqTableSz;			// Sequences table size
-	int SeqCount;				// Sequences count
+	sModelHeader ModelHeader;
+	sModelSeq * SeqTable;
+	ulong SeqTableSz;
+	int SeqCount;
 	FILE * ptrInFile;
 	FILE * ptrOutFile;
 	char cOutFileName[PATH_LEN];
 
-	// Open input file
 	SafeFileOpen(&ptrInFile, FileName, "rb");
-
-	// Load model header
 	ModelHeader.UpdateFromFile(&ptrInFile);
 
-	// Check model
 	if (ModelHeader.CheckModel() == NORMAL_MODEL)
-	{
 		printf("Internal name: %s \nSequences: %i \n", ModelHeader.Name, ModelHeader.SeqCount);
-	}
-	else
-	{
-		puts("Bad model file");
-		return;
-	}
+	else { puts("Bad model file"); return; }
 
-	// Allocate memory for sequence table
 	SeqCount = ModelHeader.SeqCount;
 	SeqTableSz = sizeof(sModelSeq) * SeqCount;
 	SeqTable = (sModelSeq *) malloc(SeqTableSz);
-
-	// Read qequence table
 	FileReadBlock(&ptrInFile, SeqTable, ModelHeader.SeqTableOffset, SeqTableSz);
-
-	// Close input file
 	fclose(ptrInFile);
 
-	// Open output file
 	FileGetFullName(FileName, cOutFileName, sizeof(cOutFileName));
 	strcat(cOutFileName, "_seq.txt");
 	SafeFileOpen(&ptrOutFile, cOutFileName, "w");
 
-	// Print report
 	fprintf(ptrOutFile, "File: %s\nSequences: %d\n\n", FileName, SeqCount);
 	fprintf(ptrOutFile, "[#]\t[File]\t[Sequence]\n", FileName, SeqCount);
 	for (int sq = 0; sq < SeqCount; sq++)
 		fprintf(ptrOutFile, "%d\t%d\t%s\n", sq, SeqTable[sq].Num, SeqTable[sq].Name);
 
-	// Close output file
 	fclose(ptrOutFile);
-
-	// Free memory
 	free(SeqTable);
-
 	puts("Done!\n\n");
 }
 
 int main(int argc, char * argv[])
 {
-	FILE * ptrInputFile;
-	FILE * ptrConfigFile;
-	char ConfigFilePath[PATH_LEN];
-	char Line[80];
 	char cFileExtension[5];
 
-	// Output info
 	puts(PROG_TITLE);
 
-	// Check arguments
 	if (argc == 1)
 	{
-		// No arguments - show help screen
 		puts(PROG_INFO);
 		UTIL_WAIT_KEY("Press any key to exit ...");
 	}
-	else if (argc == 2)		// Convert model
+	else if (argc == 2)
 	{
 		FileGetExtension(argv[1], cFileExtension, 5);
-
 		printf("\nProcessing file: %s\n", argv[1]);
 
 		if (!strcmp(".mdl", cFileExtension))
 		{
-			if (CheckModel(argv[1]) == NORMAL_MODEL)
-			{
-				ConvertMDLToDOL(argv[1]);
-			}
-			else if (CheckModel(argv[1]) == SEQ_MODEL || CheckModel(argv[1]) == NOTEXTURES_MODEL)
-			{
-				ConvertSubmodel(argv[1], ".mdl", ".dol");
-			}
-			else if (CheckModel(argv[1]) == DUMMY_MODEL)
-			{
-				// Patch dummy model's extension and internal name
-				ConvertDummySubmodel(argv[1], ".mdl", ".dol");
-			}
-			else
-			{
-				puts("Can't recognise model file ...");
-			}
+			if (CheckModel(argv[1]) == NORMAL_MODEL) ConvertMDLToDOL(argv[1]);
+			else if (CheckModel(argv[1]) == SEQ_MODEL || CheckModel(argv[1]) == NOTEXTURES_MODEL) ConvertSubmodel(argv[1], ".mdl", ".dol");
+			else if (CheckModel(argv[1]) == DUMMY_MODEL) ConvertDummySubmodel(argv[1], ".mdl", ".dol");
+			else puts("Can't recognise model file ...");
 		}
 		else if (!strcmp(".dol", cFileExtension))
 		{
-			if (CheckModel(argv[1]) == NORMAL_MODEL)
-			{
-				ConvertDOLToMDL(argv[1]);
-			}
-			else if (CheckModel(argv[1]) == SEQ_MODEL || CheckModel(argv[1]) == NOTEXTURES_MODEL)
-			{
-				ConvertSubmodel(argv[1], ".dol", ".mdl");
-			}
-			else if (CheckModel(argv[1]) == DUMMY_MODEL)
-			{
-				// Patch dummy model's extension and internal name
-				ConvertDummySubmodel(argv[1], ".dol", ".mdl");
-			}
-			else
-			{
-				puts("Can't recognise model file ...");
-			}
+			if (CheckModel(argv[1]) == NORMAL_MODEL) ConvertDOLToMDL(argv[1]);
+			else if (CheckModel(argv[1]) == SEQ_MODEL || CheckModel(argv[1]) == NOTEXTURES_MODEL) ConvertSubmodel(argv[1], ".dol", ".mdl");
+			else if (CheckModel(argv[1]) == DUMMY_MODEL) ConvertDummySubmodel(argv[1], ".dol", ".mdl");
+			else puts("Can't recognise model file ...");
 		}
-		else
-		{
-			puts("Wrong file extension.");
-		}
+		else puts("Wrong file extension.");
 	}
-	else if (argc == 3 && !strcmp(argv[1], "extract") == true)		// Extract textures from model
+	else if (argc == 3 && !strcmp(argv[1], "extract") == true)
 	{
 		FileGetExtension(argv[2], cFileExtension, 5);
-
 		printf("\nProcessing file: %s\n", argv[2]);
 
 		if (!strcmp(".mdl", cFileExtension))
 		{
-			if (CheckModel(argv[2]) == NORMAL_MODEL)
-				ExtractMDLTextures(argv[2]);
-			else
-				puts("Can't find texture data ...");
+			if (CheckModel(argv[2]) == NORMAL_MODEL) ExtractMDLTextures(argv[2]);
+			else puts("Can't find texture data ...");
 		}
 		else if (!strcmp(".dol", cFileExtension))
 		{
-			if (CheckModel(argv[2]) == NORMAL_MODEL)
-				ExtractDOLTextures(argv[2]);
-			else
-				puts("Can't find texture data ...");
+			if (CheckModel(argv[2]) == NORMAL_MODEL) ExtractDOLTextures(argv[2]);
+			else puts("Can't find texture data ...");
 		}
-		else
-		{
-			puts("Wrong file extension.");
-		}
+		else puts("Wrong file extension.");
 	}
-	else if (argc == 3 && !strcmp(argv[1], "seqrep") == true)		// Report sequences
+	else if (argc == 3 && !strcmp(argv[1], "seqrep") == true)
 	{
 		FileGetExtension(argv[2], cFileExtension, 5);
-
 		printf("\nProcessing file: %s\n", argv[2]);
 
 		if (!strcmp(".mdl", cFileExtension) || !strcmp(".dol", cFileExtension))
@@ -1496,12 +1076,29 @@ int main(int argc, char * argv[])
 		else
 			puts("Wrong file extension.");
 	}
+	// -------------------------------------------------------
+	// NEW: "scale" mode - use ScaleResize for MDL->DOL
+	// Usage: mdltool scale mymodel.mdl
+	// -------------------------------------------------------
+	else if (argc == 3 && !strcmp(argv[1], "scale") == true)
+	{
+		g_UseScaleResize = true;
+		FileGetExtension(argv[2], cFileExtension, 5);
+		printf("\nProcessing file: %s (scale resize mode)\n", argv[2]);
+
+		if (!strcmp(".mdl", cFileExtension))
+		{
+			if (CheckModel(argv[2]) == NORMAL_MODEL) ConvertMDLToDOL(argv[2]);
+			else if (CheckModel(argv[2]) == SEQ_MODEL || CheckModel(argv[2]) == NOTEXTURES_MODEL) ConvertSubmodel(argv[2], ".mdl", ".dol");
+			else if (CheckModel(argv[2]) == DUMMY_MODEL) ConvertDummySubmodel(argv[2], ".mdl", ".dol");
+			else puts("Can't recognise model file ...");
+		}
+		else puts("Scale mode only applies to .mdl -> .dol conversion.");
+	}
 	else
 	{
 		puts("Can't recognise arguments.");
 	}
 
-	//getchar();
-	
 	return 0;
 }

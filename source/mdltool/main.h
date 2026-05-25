@@ -1,4 +1,5 @@
 // Author:	supadupaplex
+// Modified:	Added scale resize mode and texture validation warnings
 // License:	BSD-3-Clause (check out license.txt)
 
 //
@@ -17,9 +18,10 @@
 #include <ctype.h>		// tolower()
 
 ////////// Definitions //////////
-#define PROG_TITLE "\nPS2 HL model tool v1.15\n"
+#define PROG_TITLE "\nPS2 HL model tool v1.15+\n"
 #define PROG_INFO "\
 Developed by supadupaplex, 2017-2021\n\
+Modified: scale resize + texture warnings\n\
 License: BSD-3-Clause (check out license.txt)\n\
 \n\
 How to use:\n\
@@ -28,6 +30,7 @@ How to use:\n\
 Optional features:\n\
  - extract textures: mdltool extract [filename]\n\
  - report sequences: mdltool seqrep [filename]\n\
+ - use scale resize:  mdltool scale [filename]\n\
 \n\
 For more info check out readme.txt\n\
 "
@@ -65,38 +68,35 @@ For more info check out readme.txt\n\
 ////////// Structures //////////
 
 // MDL/DOL model header
-#pragma pack(1)					// Eliminate unwanted 0x00 bytes
+#pragma pack(1)				// Eliminate unwanted 0x00 bytes
 struct sModelHeader
 {
-	char Signature[4];			// "IDST"
-	ulong Version;				// 0xA - GoldSrc model
-	char Name[64];				// Internal model name
-	ulong FileSize;				// Model file size
-	char SomeData1[88];			// Data that is not important for conversion
-	ulong SeqCount;				// How many sequences
+	char Signature[4];		// "IDST"
+	ulong Version;			// 0xA - GoldSrc model
+	char Name[64];			// Internal model name
+	ulong FileSize;			// Model file size
+	char SomeData1[88];		// Data that is not important for conversion
+	ulong SeqCount;			// How many sequences
 	ulong SeqTableOffset;		// Location of sequence table 
 	ulong SubmodelCount;		// How many submodels
 	ulong SubmodelTableOffset;	// Location of submodel table 
-	ulong TextureCount;			// How many textures
+	ulong TextureCount;		// How many textures
 	ulong TextureTableOffset;	// Texture table location
 	ulong TextureDataOffset;	// Texture data location
-	ulong SkinCount;			// How many skins
+	ulong SkinCount;		// How many skins
 	ulong SkinEntrySize;		// Size of entry in skin table (measured in shorts)
 	ulong SkinTableOffset;		// Location of skin table
-	ulong SubmeshCount;			// How many submeshes
+	ulong SubmeshCount;		// How many submeshes
 	ulong SubmeshTableOffset;	// Location of submesh table
-	char SomeData2[32];			// Data that is not important for conversion
+	char SomeData2[32];		// Data that is not important for conversion
 
 	void UpdateFromFile(FILE ** ptrFile)	// Update header from file
 	{
 		FileReadBlock(ptrFile, this, 0, sizeof(sModelHeader));
-
-		// I found some models that have long non null terminated internal name string
-		// that was causing creepy beeping during printf(), so there is a fix for that
 		Name[63] = '\0';
 	}
 
-	int CheckModel()					// Check model type
+	int CheckModel()			// Check model type
 	{
 		if (this->Signature[0] == 'I' && this->Signature[1] == 'D' && this->Signature[2] == 'S' && this->Version == 0xA)
 		{
@@ -118,64 +118,59 @@ struct sModelHeader
 
 	void Rename(const char * NewName)
 	{
-		// Clear Name[] from garbage and leftovers
 		memset(this->Name, 0x00, sizeof(this->Name));
-
 		strcpy(this->Name, NewName);
 	}
 };
 
 // MDL/DOL sequence descriptor
-#pragma pack(1)					// No padding/spacers
+#pragma pack(1)				// No padding/spacers
 struct sModelSeq
 {
 	char Name[32];			// Sequence name
 	char SomeData1[124];
-	int Num;				// Sequence file number
+	int Num;			// Sequence file number
 	char SomeData2[16];
 };
 
 
 // Extra section of DOL model headers
-#pragma pack(1)					// Eliminate unwanted 0x00 bytes
+#pragma pack(1)				// Eliminate unwanted 0x00 bytes
 struct sDOLExtraSection
 {
-	ulong LODDataOffset;	// Points to a location of a LOD data section
+	ulong LODDataOffset;		// Points to a location of a LOD data section
 	uchar MaxBodyParts;		// Maximum number of body parts inside one body group
-	uchar NumBodyGroups;	// How many body groups are present in the model (setting both MaxBodyParts and NumBodyGroups to 0 disables LODs)
+	uchar NumBodyGroups;		// How many body groups are present in the model
 	uchar Magic[2];			// Filled with zeroes
 	ulong FadeStart;		// Model fade: start distance
 	ulong FadeEnd;			// Model fade: end distance
 };
 
 // DOL model LOD table entry
-#pragma pack(1)					// Eliminate unwanted 0x00 bytes
+#pragma pack(1)				// Eliminate unwanted 0x00 bytes
 struct sDOLLODEntry
 {
-	ulong LODCount;			// Number of LODs for the specific body part (excluding full quality body part (LOD0))
-	ulong LODDistances[4];	// Distances at which corresponding LODs are displayed
+	ulong LODCount;			// Number of LODs for the specific body part
+	ulong LODDistances[4];		// Distances at which corresponding LODs are displayed
 };
 
 // MDL/DOL texture table entry
-#pragma pack(1)					// Eliminate unwanted 0x00 bytes
+#pragma pack(1)				// Eliminate unwanted 0x00 bytes
 struct sModelTextureEntry
 {
-	char Name[68];				// Texture name
-	ulong Width;				// Texture width
-	ulong Height;				// Texture height
-	ulong Offset;				// Texture offset (in bytes)
+	char Name[68];			// Texture name
+	ulong Width;			// Texture width
+	ulong Height;			// Texture height
+	ulong Offset;			// Texture offset (in bytes)
 
-	void UpdateFromFile(FILE ** ptrFile, ulong TextureTableOffset, ulong TextureTableEntryNumber)		// Update texture entry from model file
+	void UpdateFromFile(FILE ** ptrFile, ulong TextureTableOffset, ulong TextureTableEntryNumber)
 	{
 		FileReadBlock(ptrFile, this, TextureTableOffset + TextureTableEntryNumber * sizeof(sModelTextureEntry), sizeof(sModelTextureEntry));
 	}
 
-	void Update(const char * NewName, ulong NewWidth, ulong NewHeight, ulong NewOffset)			// Update texture entry with new data
+	void Update(const char * NewName, ulong NewWidth, ulong NewHeight, ulong NewOffset)
 	{
-		// Clear memory from garbage
 		memset(this, 0x00, sizeof(sModelTextureEntry));
-
-		// Update fields
 		strcpy(this->Name, NewName);
 		this->Width = NewWidth;
 		this->Height = NewHeight;
@@ -194,53 +189,50 @@ struct sBMPHeader
 	ulong StructSize;		// BMP version
 	ulong Width;			// Picture Width (in pixels)
 	ulong Height;			// Picture Height (in pixels)
-	ushort Signature3;		// 
-	ushort BitsPerPixel;	// How many bits per 1 pixel
+	ushort Signature3;
+	ushort BitsPerPixel;		// How many bits per 1 pixel
 	ulong Compression;		// Compression type
-	ulong PixelDataSize;	// Size of bitmap
-	ulong HorizontalPPM;	// Horizontal pixels per meter value
-	ulong VerticalPPM;		// Vertical pixels per meter value
-	ulong ColorTabSize;		// How many colors are present in color table
-	ulong ColorTabAlloc;	// How many colors are actually used in color table
+	ulong PixelDataSize;		// Size of bitmap
+	ulong HorizontalPPM;
+	ulong VerticalPPM;
+	ulong ColorTabSize;
+	ulong ColorTabAlloc;
 
-	void Update(unsigned long int Width, unsigned long int Height)		// Update all fields of BMP header
+	void Update(unsigned long int Width, unsigned long int Height)
 	{
-		this->Signature1[0] = 'B';				// Add 'BM' signature
-		this->Signature1[1] = 'M';				//
-		this->Signature2 = 0x00000000;			// Should be 0x00000000
-		this->Offset = 0x00000436;				// Bitmap offset for version 3 BMP
-		this->StructSize = 0x00000028;			// Version 3 BMP
-		this->Signature3 = 0x0001;				// Should be 0x0001 for BMP
-		this->BitsPerPixel = 0x0008;			// 8 bit palletized bitmap
-		this->Compression = 0x00000000;			// RGB bitmap (no compression)
-		this->HorizontalPPM = 0x00000000;		// Horizontal pixels per meter value (not used)
-		this->VerticalPPM = 0x00000000;			// Vertical pixels per meter value (not used)
-		this->ColorTabSize = 0x00000100;		// How many colors in color table
-		this->ColorTabAlloc = 0x00000100;		// How many colors actually used in color table
-		this->Width = Width;					// Picture Width (in pixels)
-		this->Height = Height;					// Picture Height (in pixels)
-		this->PixelDataSize = Height * Width;					// For this case it = Height * Width
-		this->FileSize = this->PixelDataSize + this->Offset;	// For this case it = PixelDataSize + Offset
+		this->Signature1[0] = 'B';
+		this->Signature1[1] = 'M';
+		this->Signature2 = 0x00000000;
+		this->Offset = 0x00000436;
+		this->StructSize = 0x00000028;
+		this->Signature3 = 0x0001;
+		this->BitsPerPixel = 0x0008;
+		this->Compression = 0x00000000;
+		this->HorizontalPPM = 0x00000000;
+		this->VerticalPPM = 0x00000000;
+		this->ColorTabSize = 0x00000100;
+		this->ColorTabAlloc = 0x00000100;
+		this->Width = Width;
+		this->Height = Height;
+		this->PixelDataSize = Height * Width;
+		this->FileSize = this->PixelDataSize + this->Offset;
 	}
 };
 
 // DOL texture (psi) header
 struct sDOLTextureHeader
 {
-	char Name[16];		// Internal image name (same as texture name in model texture table, but without *.bmp and cut, if longer than 16 bytes)
-	ulong LODCount;		// How many LODs. Used in decals only
-	ulong Type;			// 2 - 8 bit palettized image, 5 - 32 bit RGBA image
-	ushort Width;		// Texture width (in pixels)
-	ushort Height;		// Texture height (in pixels)
-	ushort UpWidth;		// Upscale: target width (in pixels)
-	ushort UpHeight;	// Upscale: target height (in pixels)
+	char Name[16];
+	ulong LODCount;
+	ulong Type;
+	ushort Width;
+	ushort Height;
+	ushort UpWidth;
+	ushort UpHeight;
 
 	void Update(const char * NewName, ushort NewWidth, ushort NewHeight)
 	{
-		// Clear memory from garbage
 		memset(this, 0x00, sizeof(sDOLTextureHeader));
-
-		// Update fields
 		snprintf(this->Name, sizeof(this->Name), "%s", NewName);
 		this->LODCount = 0;
 		this->Type = 2;
@@ -251,18 +243,26 @@ struct sDOLTextureHeader
 	}
 };
 
+// -------------------------------------------------------
+// Helper: check if a value is a power of 2 (and >= PSI_MIN_DIMENSION)
+// -------------------------------------------------------
+static inline bool IsPowerOf2Valid(uint v)
+{
+	return (v >= PSI_MIN_DIMENSION) && ((v & (v - 1)) == 0);
+}
+
 // Model texture data
-#pragma pack(1)					// Eliminate unwanted 0x00 bytes
+#pragma pack(1)				// Eliminate unwanted 0x00 bytes
 struct sTexture
 {
-	char Name[64];				// Texture name
-	ulong Width;				// Texture width (in pixels)
-	ulong Height;				// Texture height (in pixels)
-	uchar * Palette;			// Texture palette
-	ulong PaletteSize;			// Texture palette size
-	uchar * Bitmap;				// Pointer to bitmap
-	
-	void Initialize()			// Initialize structure
+	char Name[64];			// Texture name
+	ulong Width;			// Texture width (in pixels)
+	ulong Height;			// Texture height (in pixels)
+	uchar * Palette;		// Texture palette
+	ulong PaletteSize;		// Texture palette size
+	uchar * Bitmap;			// Pointer to bitmap
+
+	void Initialize()
 	{
 		strcpy(this->Name, "New_Texture");
 		this->Width = 0;
@@ -272,13 +272,11 @@ struct sTexture
 		this->Bitmap = NULL;
 	}
 
-	void UpdateFromFile(FILE ** ptrFile, ulong FileBitmapOffset, ulong FileBitmapSize, ulong FilePaletteOffset, ulong FilePaletteSize, const char * NewName, ulong NewWidth, ulong NewHeight)	// Update from file
+	void UpdateFromFile(FILE ** ptrFile, ulong FileBitmapOffset, ulong FileBitmapSize, ulong FilePaletteOffset, ulong FilePaletteSize, const char * NewName, ulong NewWidth, ulong NewHeight)
 	{
-		// Destroy old palette and bitmap
 		free(Palette);
 		free(Bitmap);
 
-		// Allocate memory for new ones
 		Palette = (uchar *) malloc(FilePaletteSize);
 		Bitmap = (uchar *) malloc(FileBitmapSize);
 		if (Palette == NULL || Bitmap == NULL)
@@ -287,72 +285,22 @@ struct sTexture
 			exit(EXIT_FAILURE);
 		}
 
-		// Copy data from file to memory
 		FileReadBlock(ptrFile, (char *) Palette, FilePaletteOffset, FilePaletteSize);
 		FileReadBlock(ptrFile, (char *) Bitmap, FileBitmapOffset, FileBitmapSize);
 
-		// Update other fields
 		strcpy(this->Name, NewName);
 		this->Width = NewWidth;
 		this->Height = NewHeight;
 		this->PaletteSize = FilePaletteSize;
 	}
 
-	/*void Rename(const char * NewName)
-	{
-		// Clear name from garbage and leftovers
-		memset(this->Name, 0x00, sizeof(this->Name));;
-
-		// Update name
-		strcpy(this->Name, NewName);
-	}
-
-	void UpdateImageData(char * NewBitmap, ulong NewWidth, ulong NewHeight)
-	{
-		this->Bitmap = (uchar *) NewBitmap;
-		this->Width = NewWidth;
-		this->Height = NewHeight;
-	}*/
-
-	void ScaleResize(ulong NewWidth, ulong NewHeight)			// Resize bitmap. Used for MDL to DOL conversion.
+	// -------------------------------------------------------
+	// ORIGINAL: tile resize (repeats content to fill new size)
+	// -------------------------------------------------------
+	void TileResize(ulong NewWidth, ulong NewHeight)
 	{
 		char * NewBitmap;
 
-		// Allocate memory for new bitmap
-		NewBitmap = (char *) malloc(NewWidth * NewHeight);	
-		if (NewBitmap == NULL)
-		{
-			UTIL_WAIT_KEY("Unable to allocate memory ...");
-			exit(EXIT_FAILURE);
-		}
-
-		// Copy resized old bitmap to new one
-		for (int NewY = 0; NewY < NewHeight; NewY++)
-			for (int NewX = 0; NewX < NewWidth; NewX++)
-			{
-				int OldY = (int) round((double) NewY / (NewHeight - 1) * (this->Height - 1));
-				int OldX = (int) round((double) NewX / (NewWidth - 1) * (this->Width - 1));
-
-				NewBitmap[(NewWidth * NewY) + NewX] = this->Bitmap[(this->Width * OldY) + OldX];
-			}
-
-		
-		// Destroy old bitmap
-		free(this->Bitmap);
-
-		// Save pointer to new bitmap
-		this->Bitmap = (uchar *) NewBitmap;
-
-		// Update bitmap size
-		this->Width = NewWidth;
-		this->Height = NewHeight;
-	}
-
-	void TileResize(ulong NewWidth, ulong NewHeight)			// Resize bitmap by tiling old in new one. Used for MDL to DOL conversion.
-	{
-		char * NewBitmap;
-
-		// Allocate memory for new bitmap
 		NewBitmap = (char *)malloc(NewWidth * NewHeight);
 		if (NewBitmap == NULL)
 		{
@@ -360,47 +308,82 @@ struct sTexture
 			exit(EXIT_FAILURE);
 		}
 
-		// Tile new bitmap with old one
-		uint NewX, NewY, OldX, OldY;
-		OldX = 0;
-		OldY = 0;
-		for (int NewY = 0; NewY < NewHeight; NewY++)
+		uint OldX = 0, OldY = 0;
+		for (int NewY = 0; NewY < (int)NewHeight; NewY++)
 		{
-			for (int NewX = 0; NewX < NewWidth; NewX++)
+			OldX = 0;
+			for (int NewX = 0; NewX < (int)NewWidth; NewX++)
 			{
-				if (NewX == 0)
-					OldX = 0;
-
 				NewBitmap[(NewWidth * NewY) + NewX] = this->Bitmap[(this->Width * OldY) + OldX];
-
-				OldX++;
-				if (OldX >= this->Width)
-					OldX = 0;
+				if (++OldX >= this->Width) OldX = 0;
 			}
-			OldY++;
-			if (OldY >= this->Height)
-				OldY = 0;
-
+			if (++OldY >= this->Height) OldY = 0;
 		}
 
-
-
-		// Destroy old bitmap
 		free(this->Bitmap);
-
-		// Save pointer to new bitmap
-		this->Bitmap = (uchar *)NewBitmap;
-
-		// Update bitmap size
+		this->Bitmap = (uchar *) NewBitmap;
 		this->Width = NewWidth;
 		this->Height = NewHeight;
 	}
 
-	void FlipBitmap()		// Flip bitmap vertically. Needed for DOL\MDL to BMP conversion and vice versa.
+	// -------------------------------------------------------
+	// NEW: scale resize (nearest-neighbour proportional stretch)
+	// Avoids seam artefacts when original size is not a multiple
+	// of the target power-of-2. Recommended for conversion.
+	// -------------------------------------------------------
+	void ScaleResize(ulong NewWidth, ulong NewHeight)
 	{
 		char * NewBitmap;
 
-		// Allocate memory for new bitmap
+		NewBitmap = (char *) malloc(NewWidth * NewHeight);
+		if (NewBitmap == NULL)
+		{
+			UTIL_WAIT_KEY("Unable to allocate memory ...");
+			exit(EXIT_FAILURE);
+		}
+
+		for (ulong NewY = 0; NewY < NewHeight; NewY++)
+		{
+			// Map new row -> old row using integer fixed-point arithmetic
+			// to avoid floating-point rounding drift across thousands of pixels
+			ulong OldY = (NewY * this->Height) / NewHeight;
+			for (ulong NewX = 0; NewX < NewWidth; NewX++)
+			{
+				ulong OldX = (NewX * this->Width) / NewWidth;
+				NewBitmap[(NewWidth * NewY) + NewX] = this->Bitmap[(this->Width * OldY) + OldX];
+			}
+		}
+
+		free(this->Bitmap);
+		this->Bitmap = (uchar *) NewBitmap;
+		this->Width = NewWidth;
+		this->Height = NewHeight;
+	}
+
+	// -------------------------------------------------------
+	// Warn if texture dimensions are not power-of-2.
+	// Returns true if the texture needs resizing.
+	// -------------------------------------------------------
+	bool WarnIfBadDimensions()
+	{
+		bool bad = false;
+		if (!IsPowerOf2Valid(this->Width))
+		{
+			printf("  [WARNING] Texture \"%s\": width %u is not a power of 2. Will be resized.\n", this->Name, this->Width);
+			bad = true;
+		}
+		if (!IsPowerOf2Valid(this->Height))
+		{
+			printf("  [WARNING] Texture \"%s\": height %u is not a power of 2. Will be resized.\n", this->Name, this->Height);
+			bad = true;
+		}
+		return bad;
+	}
+
+	void FlipBitmap()
+	{
+		char * NewBitmap;
+
 		NewBitmap = (char *)malloc(this->Width * this->Height);
 		if (NewBitmap == NULL)
 		{
@@ -408,19 +391,15 @@ struct sTexture
 			exit(EXIT_FAILURE);
 		}
 
-		// Copy flipped bitmap to new place
-		for (int y = 0; y < this->Height; y++)
-			for (int x = 0; x < this->Width; x++)
+		for (int y = 0; y < (int)this->Height; y++)
+			for (int x = 0; x < (int)this->Width; x++)
 				NewBitmap[(this->Width * y) + x] = this->Bitmap[(this->Width * ((this->Height - 1) - y)) + x];
 
-		// Destroy old bitmap
 		free(this->Bitmap);
-
-		// Save pointer to new bitmap
 		this->Bitmap = (uchar *) NewBitmap;
 	}
 
-	void PaletteReformat(uint PaletteElementSize)			// Reposition color table elements. Used for DOL to MDL and MDL to DOL conversions.
+	void PaletteReformat(uint PaletteElementSize)
 	{
 		uchar Remainder;
 		uchar Temp;
@@ -438,39 +417,13 @@ struct sTexture
 		}
 	}
 
-	/*
-	// Old method of color correction (similar used in Jed's HLMV). Replaced with PaletteReformat().
-
-	void PatchBitmap()	// Patch bitmap byte data. Needed for BMP\MDL to DOL conversion and vice versa.
-	{
-		uchar Remainder;
-
-		for (int i = 0; i < (this->Width * this->Height); i++)
-		{
-			Remainder = this->Bitmap[i] % 0x20;
-
-			if (((0x00 <= Remainder) && (Remainder <= 0x07)) || ((0x18 <= Remainder) && (Remainder <= 0x1F)))
-			{
-				this->Bitmap[i] = this->Bitmap[i];
-			}
-			else
-			{
-				if ((0x07 < Remainder) && (Remainder < 0x10))
-					this->Bitmap[i] = this->Bitmap[i] + 0x08;
-				else
-					this->Bitmap[i] = this->Bitmap[i] - 0x08;
-			}
-		}
-	}*/
-
-	void PaletteRemoveSpacers()	// Convert palette to MDL format
+	void PaletteRemoveSpacers()
 	{
 		char * NewPalette;
 		ulong NewPaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * MDL_PALETTE_ELEMENT_SIZE;
 
 		if (this->PaletteSize == EIGHT_BIT_PALETTE_ELEMENTS_COUNT * DOL_BMP_PALETTE_ELEMENT_SIZE)
 		{
-			// Allocate memory for new palette
 			NewPalette = (char *)malloc(NewPaletteSize);
 			if (NewPalette == NULL)
 			{
@@ -478,10 +431,9 @@ struct sTexture
 				exit(EXIT_FAILURE);
 			}
 
-			// Copy palette without spacers to new place
 			int ByteCounterOld = 0;
 			int ByteCounterNew = 0;
-			for (ByteCounterOld = 0; ByteCounterOld < this->PaletteSize; ByteCounterOld++)	// Copy every first 3 out of 4 bytes from old palette to new one
+			for (ByteCounterOld = 0; ByteCounterOld < (int)this->PaletteSize; ByteCounterOld++)
 			{
 				if ((ByteCounterOld + 1) % 4 != 0)
 				{
@@ -490,25 +442,19 @@ struct sTexture
 				}
 			}
 
-			// Destroy old palette
 			free(this->Palette);
-
-			// Save pointer to new palette
 			this->Palette = (uchar *) NewPalette;
-
-			// Update size
 			this->PaletteSize = NewPaletteSize;
 		}
 	}
 
-	void PaletteAddSpacers(char Spacer)		// Convert palette to DOL\BMP format
+	void PaletteAddSpacers(char Spacer)
 	{
 		char * NewPalette;
 		ulong NewPaletteSize = EIGHT_BIT_PALETTE_ELEMENTS_COUNT * DOL_BMP_PALETTE_ELEMENT_SIZE;
 
 		if (this->PaletteSize == EIGHT_BIT_PALETTE_ELEMENTS_COUNT * MDL_PALETTE_ELEMENT_SIZE)
 		{
-			// Allocate memory for new palette
 			NewPalette = (char *)malloc(NewPaletteSize);
 			if (NewPalette == NULL)
 			{
@@ -516,10 +462,9 @@ struct sTexture
 				exit(EXIT_FAILURE);
 			}
 
-			// Copy palette with spacers to new place
 			int ByteCounterOld = 0;
 			int ByteCounterNew = 0;
-			for (ByteCounterNew = 0; ByteCounterNew < NewPaletteSize; ByteCounterNew++)	// Copy 3 bytes from old palette + Spacer to new one
+			for (ByteCounterNew = 0; ByteCounterNew < (int)NewPaletteSize; ByteCounterNew++)
 			{
 				if ((ByteCounterNew + 1) % 4 != 0)
 				{
@@ -532,22 +477,17 @@ struct sTexture
 				}
 			}
 
-			// Destroy old palette
 			free(this->Palette);
-
-			// Save pointer to new palette
 			this->Palette = (uchar *) NewPalette;
-
-			// Update size
 			this->PaletteSize = NewPaletteSize;
 		}
 	}
 
-	void PaletteSwapRedAndGreen(int ElementSize)		// Needed for MDL/DOL to BMP conversion and vice versa.
+	void PaletteSwapRedAndGreen(int ElementSize)
 	{
 		char Temp;
 
-		for (int Element = 0; Element < EIGHT_BIT_PALETTE_ELEMENTS_COUNT; Element++)	// Swap 1-st and 3-rd bytes in element
+		for (int Element = 0; Element < EIGHT_BIT_PALETTE_ELEMENTS_COUNT; Element++)
 		{
 			Temp = this->Palette[Element * ElementSize];
 			this->Palette[Element * ElementSize] = this->Palette[Element * ElementSize + 2];

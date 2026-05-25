@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mdltool GUI</title>
+<style>
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --surface2: #1e1e21;
+    --border: #2a2a2e;
+    --border2: #3a3a3f;
+    --accent: #c8783a;
+    --accent2: #e09060;
+    --text: #d4d0c8;
+    --muted: #7a7870;
+    --green: #5a9e6a;
+    --red: #a85050;
+    --yellow: #b89040;
+    --mono: 'Courier New', Courier, monospace;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    user-select: none;
+  }
+
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    letter-spacing: 0;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+
+  header small {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: calc(100vh - 57px);
+  }
+
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 0 16px;
+    margin-bottom: 20px;
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .op-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    margin-bottom: 2px;
+    transition: background 0.1s, border-color 0.1s;
+  }
+
+  .op-btn:hover { background: var(--surface2); }
+
+  .op-btn.active {
+    background: var(--surface2);
+    border-color: var(--accent);
+    color: var(--accent2);
+  }
+
+  .op-icon {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .op-btn.active .op-icon { opacity: 1; }
+
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-body { padding: 16px; }
+
+  .drop-zone {
+    border: 1px dashed var(--border2);
+    border-radius: 4px;
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(200, 120, 58, 0.05);
+  }
+
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+
+  .drop-zone-text {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .drop-zone-text strong {
+    display: block;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .file-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 5px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    margin-top: 10px;
+    max-width: 100%;
+    word-break: break-all;
+  }
+
+  .file-ext {
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .opt-group { display: flex; flex-direction: column; gap: 6px; }
+
+  .opt-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+    flex-shrink: 0;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border2);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .toggle input:checked + .toggle-track { background: var(--accent); }
+
+  .toggle-thumb {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    transition: left 0.2s;
+    pointer-events: none;
+  }
+
+  .toggle input:checked ~ .toggle-thumb { left: 19px; }
+
+  .toggle-label {
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--mono);
+  }
+
+  .hint.warn {
+    border-color: var(--yellow);
+    color: #c8a84a;
+  }
+
+  .hint.info {
+    border-color: #3a5a8a;
+    color: #8ab0d8;
+  }
+
+  .gen-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 11px;
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  .gen-btn:hover { background: var(--accent2); }
+  .gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .output-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.8;
+    color: #a8c890;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 60px;
+    position: relative;
+  }
+
+  .output-block .placeholder {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: color 0.1s, border-color 0.1s;
+  }
+
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .dl-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: border-color 0.1s, color 0.1s;
+    text-decoration: none;
+  }
+
+  .dl-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-weight: bold;
+  }
+
+  .badge-new { background: #2a4a2a; color: var(--green); }
+  .badge-orig { background: #3a2a1a; color: #c89060; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+
+  .info-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .info-card-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    width: 28px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .info-card-text { font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .info-card-text strong { color: var(--text); display: block; margin-bottom: 2px; }
+
+  @media (max-width: 640px) {
+    .options-grid { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">MDL</div>
+  <div>
+    <h1>mdltool GUI</h1>
+    <small>PS2 Half-Life model converter &mdash; v1.15+</small>
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Operação</div>
+      <button class="op-btn active" data-op="mdl2dol" onclick="setOp('mdl2dol')">
+        <svg class="op-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        MDL → DOL
+      </button>
+      <button class="op-btn" data-op="dol2mdl" onclick="setOp('dol2mdl')">
+        <svg class="op-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        DOL → MDL
+      </button>
+      <hr class="divider">
+      <button class="op-btn" data-op="extract" onclick="setOp('extract')">
+        <svg class="op-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12h6M12 9v6"/></svg>
+        Extrair texturas
+      </button>
+      <button class="op-btn" data-op="seqrep" onclick="setOp('seqrep')">
+        <svg class="op-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        Report de sequências
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Referência rápida</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.9; font-family:var(--mono);">
+        .mdl = PC (GoldSrc)<br>
+        .dol = PS2 Half-Life<br>
+        .inf = extra LOD/fade<br>
+        .pvr = Dreamcast (só extração)
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Sobre</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.7;">
+        Gera comandos .bat prontos para executar com o <span style="color:var(--accent2)">mdltool.exe</span> melhorado.<br><br>
+        Coloque o .exe e o .bat na mesma pasta dos modelos.
+      </div>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- File drop -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        Arquivo de entrada
+      </div>
+      <div class="panel-body">
+        <div class="drop-zone" id="dropZone"
+          ondragover="event.preventDefault(); this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="handleDrop(event)">
+          <input type="file" id="fileInput" accept=".mdl,.dol" onchange="handleFile(this.files[0])">
+          <div class="drop-zone-text">
+            <strong>Arraste o arquivo aqui ou clique para selecionar</strong>
+            Aceita .mdl e .dol
+          </div>
+        </div>
+        <div id="filePill" style="display:none;">
+          <div class="file-pill">
+            <span class="file-ext" id="fileExt">MDL</span>
+            <span id="fileName">modelo.mdl</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="panel" id="optionsPanel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
+        Opções de conversão
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:14px;">
+
+        <div class="options-grid" id="resizeOptions">
+          <div class="opt-group">
+            <div class="opt-label">Modo de resize de textura</div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="scaleMode" onchange="updateOutput()">
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+              </label>
+              <label class="toggle-label" for="scaleMode">Scale resize <span class="badge badge-new">novo</span></label>
+            </div>
+            <div id="resizeHint" class="hint info">
+              TILE: repete o conteúdo da textura para preencher a nova dimensão. Comportamento original — pode criar bordas com artefatos.
+            </div>
+          </div>
+        </div>
+
+        <div id="infNote" class="hint warn" style="display:none;">
+          ⚠ Se o .dol original tiver LODs ou body groups, o arquivo .inf gerado automaticamente precisa estar na mesma pasta antes de converter de volta com o mdltool.
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Comando gerado
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="output-block" id="cmdOutput">
+          <span class="placeholder">Selecione um arquivo e configure as opções acima...</span>
+        </div>
+        <div class="row">
+          <button class="gen-btn" style="flex:1; max-width:200px;" id="genBatBtn" onclick="downloadBat()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Baixar .bat
+          </button>
+          <button class="dl-btn" id="copyBtn" onclick="copyCmd()" disabled>Copiar comando</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch generator -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        Gerador de batch (múltiplos arquivos)
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:12px;">
+        <p style="font-size:12px; color:var(--muted); line-height:1.7;">
+          Gera um .bat que processa <strong style="color:var(--text)">todos os arquivos</strong> da pasta em sequência. Coloque na mesma pasta que os modelos e o mdltool.exe.
+        </p>
+        <div class="options-grid">
+          <div class="opt-group">
+            <div class="opt-label">Operação do batch</div>
+            <select id="batchOp" onchange="updateBatchOutput()" style="background:var(--surface2); border:1px solid var(--border2); color:var(--text); padding:7px 10px; border-radius:3px; font-size:13px; font-family:var(--sans);">
+              <option value="mdl2dol_tile">MDL → DOL (tile resize)</option>
+              <option value="mdl2dol_scale">MDL → DOL (scale resize)</option>
+              <option value="dol2mdl">DOL → MDL</option>
+              <option value="extract_mdl">Extrair texturas de MDLs</option>
+              <option value="extract_dol">Extrair texturas de DOLs</option>
+              <option value="seqrep">Report de sequências</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="output-block" id="batchOutput" style="font-size:11px;"></div>
+
+        <div class="row">
+          <button class="gen-btn" style="flex:1; max-width:200px;" onclick="downloadBatchBat()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Baixar batch .bat
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info cards -->
+    <div class="panel">
+      <div class="panel-header">Referência: resize de textura</div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="info-card">
+          <div class="info-card-icon">🔲</div>
+          <div class="info-card-text">
+            <strong>Tile resize <span class="badge badge-orig">original</span></strong>
+            Preenche a nova dimensão repetindo o conteúdo da textura original como um tile. Se a dimensão original não é múltipla da nova potência de 2 (ex: 100px → 128px), a repetição cria uma borda/costura visível que pode causar artefatos visuais no PS2.
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-icon">⬛</div>
+          <div class="info-card-text">
+            <strong>Scale resize <span class="badge badge-new">novo</span></strong>
+            Estica a textura proporcionalmente para a nova dimensão usando nearest-neighbour com aritmética inteira. Não cria bordas artificiais — a textura simplesmente é esticada. Recomendado para modelos com texturas de tamanho arbitrário.
+          </div>
+        </div>
+        <div class="hint warn">
+          ⚠ Se possível, pré-redimensione as texturas para potências de 2 (8, 16, 32, 64, 128, 256...) num editor de imagens <strong>antes</strong> de converter, para evitar qualquer tipo de artefato. Ambos os modos de resize são apenas fallback.
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+var currentOp = 'mdl2dol';
+var currentFile = null;
+
+function setOp(op) {
+  currentOp = op;
+  document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-op="' + op + '"]').classList.add('active');
+
+  var resizeOpts = document.getElementById('resizeOptions');
+  var infNote = document.getElementById('infNote');
+  var optPanel = document.getElementById('optionsPanel');
+
+  resizeOpts.style.display = (op === 'mdl2dol') ? '' : 'none';
+  infNote.style.display = (op === 'dol2mdl') ? '' : 'none';
+
+  var fileInput = document.getElementById('fileInput');
+  if (op === 'mdl2dol' || op === 'extract') {
+    fileInput.accept = '.mdl';
+  } else if (op === 'dol2mdl') {
+    fileInput.accept = '.dol';
+  } else {
+    fileInput.accept = '.mdl,.dol';
+  }
+
+  updateOutput();
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('dragover');
+  var f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+}
+
+function handleFile(f) {
+  if (!f) return;
+  currentFile = f.name;
+  document.getElementById('fileExt').textContent = f.name.split('.').pop().toUpperCase();
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('filePill').style.display = 'block';
+  document.querySelector('.drop-zone-text').style.display = 'none';
+  updateOutput();
+}
+
+document.getElementById('scaleMode').addEventListener('change', function() {
+  var hint = document.getElementById('resizeHint');
+  if (this.checked) {
+    hint.textContent = 'SCALE: estica proporcionalmente a textura para a nova dimensão com nearest-neighbour. Recomendado para texturas com tamanhos não-múltiplos da potência de 2 alvo.';
+    hint.className = 'hint warn';
+  } else {
+    hint.textContent = 'TILE: repete o conteúdo da textura para preencher a nova dimensão. Comportamento original — pode criar bordas com artefatos.';
+    hint.className = 'hint info';
+  }
+  updateOutput();
+});
+
+function buildCommand() {
+  if (!currentFile) return null;
+  var scale = document.getElementById('scaleMode').checked;
+  var f = currentFile;
+
+  switch(currentOp) {
+    case 'mdl2dol':
+      return scale
+        ? 'mdltool.exe scale "' + f + '"'
+        : 'mdltool.exe "' + f + '"';
+    case 'dol2mdl':
+      return 'mdltool.exe "' + f + '"';
+    case 'extract':
+      return 'mdltool.exe extract "' + f + '"';
+    case 'seqrep':
+      return 'mdltool.exe seqrep "' + f + '"';
+    default:
+      return null;
+  }
+}
+
+function updateOutput() {
+  var cmd = buildCommand();
+  var out = document.getElementById('cmdOutput');
+  var genBtn = document.getElementById('genBatBtn');
+  var copyBtn = document.getElementById('copyBtn');
+
+  if (!cmd) {
+    out.innerHTML = '<span class="placeholder">Selecione um arquivo e configure as opções acima...</span>';
+    genBtn.disabled = true;
+    copyBtn.disabled = true;
+    return;
+  }
+
+  var bat = '@echo off\n' + cmd + '\npause';
+  out.textContent = bat;
+  genBtn.disabled = false;
+  copyBtn.disabled = false;
+
+  if (!out.querySelector('.copy-btn')) {
+    var cb = document.createElement('button');
+    cb.className = 'copy-btn';
+    cb.textContent = 'copiar';
+    cb.onclick = copyCmd;
+    out.appendChild(cb);
+  }
+}
+
+function copyCmd() {
+  var cmd = buildCommand();
+  if (!cmd) return;
+  navigator.clipboard.writeText('@echo off\n' + cmd + '\npause').then(function() {
+    document.getElementById('copyBtn').textContent = 'Copiado!';
+    setTimeout(function() { document.getElementById('copyBtn').textContent = 'Copiar comando'; }, 1500);
+  });
+}
+
+function downloadBat() {
+  var cmd = buildCommand();
+  if (!cmd) return;
+  var content = '@echo off\r\n' + cmd + '\r\npause\r\n';
+  var fname = 'converter_' + (currentFile ? currentFile.replace(/\.[^.]+$/, '') : 'modelo') + '.bat';
+  downloadText(content, fname);
+}
+
+function getBatchCmd(op) {
+  switch(op) {
+    case 'mdl2dol_tile':
+      return 'for %%f in (*.mdl) do mdltool.exe "%%f"';
+    case 'mdl2dol_scale':
+      return 'for %%f in (*.mdl) do mdltool.exe scale "%%f"';
+    case 'dol2mdl':
+      return 'for %%f in (*.dol) do mdltool.exe "%%f"';
+    case 'extract_mdl':
+      return 'for %%f in (*.mdl) do mdltool.exe extract "%%f"';
+    case 'extract_dol':
+      return 'for %%f in (*.dol) do mdltool.exe extract "%%f"';
+    case 'seqrep':
+      return 'for %%f in (*.mdl *.dol) do mdltool.exe seqrep "%%f"';
+    default:
+      return '';
+  }
+}
+
+function updateBatchOutput() {
+  var op = document.getElementById('batchOp').value;
+  var cmd = getBatchCmd(op);
+  var content = '@echo off\r\necho Processando arquivos...\r\n' + cmd + '\r\necho Concluido!\r\npause';
+  document.getElementById('batchOutput').textContent = content;
+}
+
+function downloadBatchBat() {
+  var op = document.getElementById('batchOp').value;
+  var cmd = getBatchCmd(op);
+  var content = '@echo off\r\necho Processando arquivos...\r\n' + cmd + '\r\necho Concluido!\r\npause\r\n';
+  downloadText(content, 'batch_' + op + '.bat');
+}
+
+function downloadText(text, filename) {
+  var a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(text);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+updateBatchOutput();
+</script>
+
+</body>
+</html>
