@@ -3,6 +3,10 @@ PS2 Half-Life tools
 
 These tools are intended to convert/modify some resources of PS2 Half-life port.
 
+
+(my changes:add gui for the tools,and more)
+
+
 List of tools:
 1) **paktool**: .pak archives
 2) **mdltool**: .dol models
