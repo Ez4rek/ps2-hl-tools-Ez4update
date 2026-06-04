@@ -9,7 +9,7 @@ These tools are intended to convert/modify some resources of PS2 Half-life port.
 
 List of tools:
 1) **paktool**: .pak archives
-2) **mdltool**: .dol models
+2) **mdltool**: .dol models (New Features) (4/06/26)
 3) **sprtool**: .spz sprites
 4) **phdtool**: a tool for extensionless decals placed in DECALS.PAK and GDECALS.PAK
 5) **psitool**: .psi images and .psf fonts
